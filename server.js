@@ -6,8 +6,8 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 
 // Rutas
-app.use('/api/ai', require('./routes/ai.routes'));
-// Agrega aquí otras rutas si las necesitas
+const aiRoutes = require(__dirname + '/routes/ai.routes');
+app.use('/api', aiRoutes);
 
 app.listen(PORT, () => {
   console.log(`Servidor corriendo en http://localhost:${PORT}`);
