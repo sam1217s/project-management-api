@@ -1,0 +1,2132 @@
+// ========================================
+// MARIAM PIZZA - MÓDULO DE TAREAS, COMENTARIOS E IA
+// ========================================
+
+// src/models/Task.model.js - Modelo de Tareas
+const mongoose = require('mongoose');
+
+const taskSchema = new mongoose.Schema({
+  title: {
+    type: String,
+    required: [true, 'El título de la tarea es requerido'],
+    trim: true,
+    maxlength: [100, 'El título no puede exceder 100 caracteres']
+  },
+  description: {
+    type: String,
+    required: [true, 'La descripción es requerida'],
+    maxlength: [1000, 'La descripción no puede exceder 1000 caracteres']
+  },
+  project: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Project',
+    required: [true, 'El proyecto es requerido'],
+    index: true
+  },
+  assignedTo: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    index: true
+  },
+  createdBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: [true, 'El creador es requerido'],
+    index: true
+  },
+  status: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'State',
+    required: [true, 'El estado es requerido']
+  },
+  priority: {
+    type: String,
+    enum: ['Low', 'Medium', 'High', 'Critical'],
+    default: 'Medium',
+    index: true
+  },
+  estimatedHours: {
+    type: Number,
+    min: [0, 'Las horas estimadas deben ser positivas'],
+    default: 0
+  },
+  actualHours: {
+    type: Number,
+    min: [0, 'Las horas reales deben ser positivas'],
+    default: 0
+  },
+  startDate: {
+    type: Date,
+    default: Date.now
+  },
+  dueDate: {
+    type: Date,
+    required: [true, 'La fecha límite es requerida'],
+    validate: {
+      validator: function(dueDate) {
+        return dueDate > this.startDate;
+      },
+      message: 'La fecha límite debe ser posterior a la fecha de inicio'
+    }
+  },
+  completedAt: {
+    type: Date
+  },
+  isActive: {
+    type: Boolean,
+    default: true
+  },
+  tags: [{
+    type: String,
+    trim: true,
+    maxlength: [20, 'Los tags no pueden exceder 20 caracteres']
+  }],
+  dependencies: [{
+    task: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Task'
+    },
+    type: {
+      type: String,
+      enum: ['blocks', 'depends_on'],
+      default: 'depends_on'
+    }
+  }],
+  attachments: [{
+    filename: String,
+    originalName: String,
+    path: String,
+    mimetype: String,
+    size: Number,
+    uploadedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    uploadedAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
+  subtasks: [{
+    title: {
+      type: String,
+      required: true,
+      maxlength: 200
+    },
+    completed: {
+      type: Boolean,
+      default: false
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
+  aiGenerated: {
+    type: Boolean,
+    default: false
+  },
+  aiMetadata: {
+    confidence: {
+      type: Number,
+      min: 0,
+      max: 1
+    },
+    estimationSource: String,
+    generatedPrompt: String
+  }
+}, {
+  timestamps: true,
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true }
+});
+
+// Virtual para calcular progreso de subtareas
+taskSchema.virtual('subtaskProgress').get(function() {
+  if (this.subtasks.length === 0) return 0;
+  const completed = this.subtasks.filter(subtask => subtask.completed).length;
+  return Math.round((completed / this.subtasks.length) * 100);
+});
+
+// Virtual para verificar si está retrasada
+taskSchema.virtual('isOverdue').get(function() {
+  return this.dueDate < new Date() && !this.completedAt;
+});
+
+// Virtual para días restantes
+taskSchema.virtual('daysRemaining').get(function() {
+  if (this.completedAt) return 0;
+  const today = new Date();
+  const diffTime = this.dueDate - today;
+  return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+});
+
+// Virtual para verificar si puede iniciarse (dependencias completadas)
+taskSchema.virtual('canStart').get(function() {
+  // Implementar lógica de dependencias
+  return true; // Simplificado por ahora
+});
+
+// Middleware para actualizar proyecto cuando se completa tarea
+taskSchema.pre('save', async function(next) {
+  // Si la tarea se está completando
+  if (this.isModified('completedAt') && this.completedAt && !this.wasCompleted) {
+    this.wasCompleted = true;
+    
+    // Actualizar progreso del proyecto
+    const Project = require('./Project.model');
+    const project = await Project.findById(this.project);
+    
+    if (project) {
+      const totalTasks = await mongoose.model('Task').countDocuments({
+        project: this.project,
+        isActive: true
+      });
+      
+      const completedTasks = await mongoose.model('Task').countDocuments({
+        project: this.project,
+        isActive: true,
+        completedAt: { $exists: true, $ne: null }
+      });
+      
+      project.progress = Math.round((completedTasks / totalTasks) * 100);
+      await project.save();
+    }
+  }
+  
+  next();
+});
+
+// Índices para optimización
+taskSchema.index({ project: 1, assignedTo: 1 });
+taskSchema.index({ project: 1, status: 1 });
+taskSchema.index({ assignedTo: 1, dueDate: 1 });
+taskSchema.index({ project: 1, priority: 1 });
+taskSchema.index({ createdBy: 1 });
+taskSchema.index({ dueDate: 1 });
+taskSchema.index({ isActive: 1 });
+
+// Índice de texto para búsqueda
+taskSchema.index({
+  title: 'text',
+  description: 'text',
+  tags: 'text'
+}, {
+  weights: {
+    title: 10,
+    description: 5,
+    tags: 1
+  }
+});
+
+module.exports = mongoose.model('Task', taskSchema);
+
+// ========================================
+// src/models/Comment.model.js - Modelo de Comentarios
+// ========================================
+const mongoose = require('mongoose');
+
+const commentSchema = new mongoose.Schema({
+  content: {
+    type: String,
+    required: [true, 'El contenido del comentario es requerido'],
+    trim: true,
+    maxlength: [2000, 'El comentario no puede exceder 2000 caracteres']
+  },
+  author: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: [true, 'El autor es requerido'],
+    index: true
+  },
+  projectId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Project',
+    required: [true, 'El proyecto es requerido'],
+    index: true
+  },
+  taskId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Task',
+    index: true
+  },
+  parentComment: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Comment'
+  },
+  mentions: [{
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    notified: {
+      type: Boolean,
+      default: false
+    }
+  }],
+  attachments: [{
+    filename: String,
+    originalName: String,
+    path: String,
+    mimetype: String,
+    size: Number
+  }],
+  reactions: [{
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    type: {
+      type: String,
+      enum: ['like', 'love', 'laugh', 'wow', 'sad', 'angry'],
+      default: 'like'
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
+  isEdited: {
+    type: Boolean,
+    default: false
+  },
+  editedAt: {
+    type: Date
+  },
+  isDeleted: {
+    type: Boolean,
+    default: false
+  },
+  deletedAt: {
+    type: Date
+  }
+}, {
+  timestamps: true,
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true }
+});
+
+// Virtual para contar respuestas
+commentSchema.virtual('replyCount', {
+  ref: 'Comment',
+  localField: '_id',
+  foreignField: 'parentComment',
+  count: true
+});
+
+// Virtual para contar reacciones por tipo
+commentSchema.virtual('reactionSummary').get(function() {
+  const summary = {};
+  this.reactions.forEach(reaction => {
+    summary[reaction.type] = (summary[reaction.type] || 0) + 1;
+  });
+  return summary;
+});
+
+// Middleware para manejar menciones
+commentSchema.pre('save', function(next) {
+  if (this.isModified('content')) {
+    // Extraer menciones (@usuario)
+    const mentionRegex = /@(\w+)/g;
+    const mentions = [];
+    let match;
+    
+    while ((match = mentionRegex.exec(this.content)) !== null) {
+      mentions.push(match[1]);
+    }
+    
+    // Aquí se puede agregar lógica para resolver nombres de usuario a IDs
+    // Por simplicidad, se omite en este ejemplo
+  }
+  
+  if (this.isModified('content') && !this.isNew) {
+    this.isEdited = true;
+    this.editedAt = new Date();
+  }
+  
+  next();
+});
+
+// Índices
+commentSchema.index({ projectId: 1, createdAt: -1 });
+commentSchema.index({ taskId: 1, createdAt: -1 });
+commentSchema.index({ author: 1 });
+commentSchema.index({ parentComment: 1 });
+commentSchema.index({ isDeleted: 1 });
+
+module.exports = mongoose.model('Comment', commentSchema);
+
+// ========================================
+// src/controllers/task.controller.js - Controlador de Tareas
+// ========================================
+const Task = require('../models/Task.model');
+const Project = require('../models/Project.model');
+const State = require('../models/State.model');
+const User = require('../models/User.model');
+const { sendResponse, sendError, createPagination } = require('../utils/response.util');
+
+class TaskController {
+  // Obtener tareas de un proyecto
+  async getProjectTasks(req, res) {
+    try {
+      const { projectId } = req.params;
+      const page = parseInt(req.query.page) || 1;
+      const limit = Math.min(parseInt(req.query.limit) || 10, 50);
+      const skip = (page - 1) * limit;
+      
+      const { search, status, assignedTo, priority, dueDate } = req.query;
+
+      // Verificar que el usuario tiene acceso al proyecto
+      const project = await Project.findById(projectId);
+      if (!project) {
+        return sendError(res, 404, 'Proyecto no encontrado');
+      }
+
+      const isMember = project.owner.toString() === req.user._id.toString() ||
+                      project.members.some(member => member.user.toString() === req.user._id.toString());
+      
+      if (!isMember) {
+        return sendError(res, 403, 'No tienes acceso a este proyecto');
+      }
+
+      // Construir filtros
+      const filter = {
+        project: projectId,
+        isActive: true
+      };
+
+      if (search) {
+        filter.$text = { $search: search };
+      }
+      if (status) filter.status = status;
+      if (assignedTo) filter.assignedTo = assignedTo;
+      if (priority) filter.priority = priority;
+      
+      if (dueDate) {
+        const date = new Date(dueDate);
+        filter.dueDate = {
+          $gte: new Date(date.setHours(0, 0, 0, 0)),
+          $lt: new Date(date.setHours(23, 59, 59, 999))
+        };
+      }
+
+      const tasks = await Task.find(filter)
+        .populate('assignedTo', 'firstName lastName email avatar')
+        .populate('createdBy', 'firstName lastName email')
+        .populate('status', 'name color')
+        .populate('dependencies.task', 'title status')
+        .skip(skip)
+        .limit(limit)
+        .sort({ priority: -1, dueDate: 1, createdAt: -1 });
+
+      const total = await Task.countDocuments(filter);
+
+      sendResponse(res, 200, true, 'Tareas obtenidas exitosamente', {
+        tasks,
+        pagination: createPagination(page, limit, total)
+      });
+    } catch (error) {
+      console.error('Error obteniendo tareas:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Crear nueva tarea
+  async createTask(req, res) {
+    try {
+      const { projectId } = req.params;
+      const {
+        title,
+        description,
+        assignedTo,
+        priority,
+        estimatedHours,
+        dueDate,
+        tags,
+        dependencies,
+        subtasks
+      } = req.body;
+
+      // Verificar proyecto
+      const project = await Project.findById(projectId);
+      if (!project) {
+        return sendError(res, 404, 'Proyecto no encontrado');
+      }
+
+      // Verificar permisos
+      const canCreate = project.owner.toString() === req.user._id.toString() ||
+                       project.members.some(member => 
+                         member.user.toString() === req.user._id.toString() && 
+                         member.permissions.includes('write')
+                       );
+
+      if (!canCreate) {
+        return sendError(res, 403, 'No tienes permisos para crear tareas en este proyecto');
+      }
+
+      // Obtener estado inicial para tareas
+      const initialState = await State.findOne({
+        type: 'Task',
+        isInitial: true,
+        isActive: true
+      });
+
+      if (!initialState) {
+        return sendError(res, 500, 'No se encontró estado inicial para tareas');
+      }
+
+      // Crear tarea
+      const task = await Task.create({
+        title,
+        description,
+        project: projectId,
+        assignedTo,
+        createdBy: req.user._id,
+        status: initialState._id,
+        priority,
+        estimatedHours,
+        dueDate,
+        tags,
+        dependencies,
+        subtasks
+      });
+
+      // Poblar relaciones
+      await task.populate([
+        { path: 'assignedTo', select: 'firstName lastName email avatar' },
+        { path: 'createdBy', select: 'firstName lastName email' },
+        { path: 'status', select: 'name color' },
+        { path: 'project', select: 'name' }
+      ]);
+
+      sendResponse(res, 201, true, 'Tarea creada exitosamente', { task });
+    } catch (error) {
+      console.error('Error creando tarea:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Obtener tarea específica
+  async getTask(req, res) {
+    try {
+      const { id } = req.params;
+
+      const task = await Task.findById(id)
+        .populate('assignedTo', 'firstName lastName email avatar')
+        .populate('createdBy', 'firstName lastName email avatar')
+        .populate('status', 'name color description')
+        .populate('project', 'name owner members')
+        .populate('dependencies.task', 'title status assignedTo')
+        .populate('attachments.uploadedBy', 'firstName lastName');
+
+      if (!task || !task.isActive) {
+        return sendError(res, 404, 'Tarea no encontrada');
+      }
+
+      // Verificar acceso al proyecto
+      const project = task.project;
+      const hasAccess = project.owner.toString() === req.user._id.toString() ||
+                       project.members.some(member => member.user.toString() === req.user._id.toString());
+
+      if (!hasAccess) {
+        return sendError(res, 403, 'No tienes acceso a esta tarea');
+      }
+
+      sendResponse(res, 200, true, 'Tarea obtenida exitosamente', { task });
+    } catch (error) {
+      console.error('Error obteniendo tarea:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Actualizar tarea
+  async updateTask(req, res) {
+    try {
+      const { id } = req.params;
+      const updateData = req.body;
+
+      const task = await Task.findById(id).populate('project');
+      if (!task || !task.isActive) {
+        return sendError(res, 404, 'Tarea no encontrada');
+      }
+
+      // Verificar permisos
+      const project = task.project;
+      const canEdit = project.owner.toString() === req.user._id.toString() ||
+                     task.assignedTo?.toString() === req.user._id.toString() ||
+                     project.members.some(member => 
+                       member.user.toString() === req.user._id.toString() && 
+                       member.permissions.includes('write')
+                     );
+
+      if (!canEdit) {
+        return sendError(res, 403, 'No tienes permisos para editar esta tarea');
+      }
+
+      // Validar fechas si se están actualizando
+      if (updateData.dueDate && updateData.startDate) {
+        if (new Date(updateData.dueDate) <= new Date(updateData.startDate)) {
+          return sendError(res, 400, 'La fecha límite debe ser posterior a la fecha de inicio');
+        }
+      }
+
+      const updatedTask = await Task.findByIdAndUpdate(
+        id,
+        updateData,
+        { new: true, runValidators: true }
+      ).populate([
+        { path: 'assignedTo', select: 'firstName lastName email avatar' },
+        { path: 'createdBy', select: 'firstName lastName email' },
+        { path: 'status', select: 'name color' },
+        { path: 'project', select: 'name' }
+      ]);
+
+      sendResponse(res, 200, true, 'Tarea actualizada exitosamente', {
+        task: updatedTask
+      });
+    } catch (error) {
+      console.error('Error actualizando tarea:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Cambiar estado de tarea
+  async changeTaskStatus(req, res) {
+    try {
+      const { id } = req.params;
+      const { statusId } = req.body;
+
+      const task = await Task.findById(id).populate(['status', 'project']);
+      if (!task || !task.isActive) {
+        return sendError(res, 404, 'Tarea no encontrada');
+      }
+
+      // Verificar permisos
+      const canChangeStatus = task.assignedTo?.toString() === req.user._id.toString() ||
+                             task.project.owner.toString() === req.user._id.toString();
+
+      if (!canChangeStatus) {
+        return sendError(res, 403, 'No tienes permisos para cambiar el estado de esta tarea');
+      }
+
+      // Verificar nuevo estado
+      const newStatus = await State.findById(statusId);
+      if (!newStatus || !newStatus.isActive || newStatus.type !== 'Task') {
+        return sendError(res, 400, 'Estado no válido');
+      }
+
+      // Validar transición
+      const currentStatus = await State.findById(task.status).populate('allowedTransitions');
+      const isValidTransition = currentStatus.allowedTransitions.some(
+        transition => transition._id.toString() === statusId
+      ) || currentStatus._id.toString() === statusId;
+
+      if (!isValidTransition && currentStatus.allowedTransitions.length > 0) {
+        return sendError(res, 400, 'Transición de estado no válida');
+      }
+
+      task.status = statusId;
+
+      // Si el estado es final, marcar como completada
+      if (newStatus.isFinal) {
+        task.completedAt = new Date();
+      } else {
+        task.completedAt = null;
+      }
+
+      await task.save();
+      await task.populate('status', 'name color description');
+
+      sendResponse(res, 200, true, 'Estado de tarea cambiado exitosamente', {
+        task: {
+          _id: task._id,
+          title: task.title,
+          status: task.status,
+          completedAt: task.completedAt
+        }
+      });
+    } catch (error) {
+      console.error('Error cambiando estado de tarea:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Asignar tarea a usuario
+  async assignTask(req, res) {
+    try {
+      const { id } = req.params;
+      const { userId } = req.body;
+
+      const task = await Task.findById(id).populate('project');
+      if (!task || !task.isActive) {
+        return sendError(res, 404, 'Tarea no encontrada');
+      }
+
+      // Verificar permisos (solo owner o PM pueden asignar)
+      const project = task.project;
+      const canAssign = project.owner.toString() === req.user._id.toString() ||
+                       project.members.some(member => 
+                         member.user.toString() === req.user._id.toString() && 
+                         member.permissions.includes('manage')
+                       );
+
+      if (!canAssign) {
+        return sendError(res, 403, 'No tienes permisos para asignar tareas');
+      }
+
+      // Verificar que el usuario es miembro del proyecto
+      const isProjectMember = project.owner.toString() === userId ||
+                             project.members.some(member => member.user.toString() === userId);
+
+      if (!isProjectMember) {
+        return sendError(res, 400, 'El usuario debe ser miembro del proyecto');
+      }
+
+      task.assignedTo = userId;
+      await task.save();
+
+      await task.populate('assignedTo', 'firstName lastName email avatar');
+
+      sendResponse(res, 200, true, 'Tarea asignada exitosamente', {
+        task: {
+          _id: task._id,
+          title: task.title,
+          assignedTo: task.assignedTo
+        }
+      });
+    } catch (error) {
+      console.error('Error asignando tarea:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Obtener tareas asignadas al usuario actual
+  async getMyTasks(req, res) {
+    try {
+      const page = parseInt(req.query.page) || 1;
+      const limit = Math.min(parseInt(req.query.limit) || 10, 50);
+      const skip = (page - 1) * limit;
+      
+      const { status, priority, project, dueDate } = req.query;
+
+      const filter = {
+        assignedTo: req.user._id,
+        isActive: true
+      };
+
+      if (status) filter.status = status;
+      if (priority) filter.priority = priority;
+      if (project) filter.project = project;
+
+      if (dueDate) {
+        const today = new Date();
+        if (dueDate === 'overdue') {
+          filter.dueDate = { $lt: today };
+          filter.completedAt = { $exists: false };
+        } else if (dueDate === 'today') {
+          filter.dueDate = {
+            $gte: new Date(today.setHours(0, 0, 0, 0)),
+            $lt: new Date(today.setHours(23, 59, 59, 999))
+          };
+        } else if (dueDate === 'week') {
+          const weekFromNow = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+          filter.dueDate = { $lte: weekFromNow };
+        }
+      }
+
+      const tasks = await Task.find(filter)
+        .populate('project', 'name owner')
+        .populate('status', 'name color')
+        .populate('createdBy', 'firstName lastName')
+        .skip(skip)
+        .limit(limit)
+        .sort({ dueDate: 1, priority: -1 });
+
+      const total = await Task.countDocuments(filter);
+
+      // Estadísticas adicionales
+      const stats = {
+        total: await Task.countDocuments({ assignedTo: req.user._id, isActive: true }),
+        completed: await Task.countDocuments({ 
+          assignedTo: req.user._id, 
+          isActive: true, 
+          completedAt: { $exists: true } 
+        }),
+        overdue: await Task.countDocuments({
+          assignedTo: req.user._id,
+          isActive: true,
+          dueDate: { $lt: new Date() },
+          completedAt: { $exists: false }
+        })
+      };
+
+      sendResponse(res, 200, true, 'Mis tareas obtenidas exitosamente', {
+        tasks,
+        stats,
+        pagination: createPagination(page, limit, total)
+      });
+    } catch (error) {
+      console.error('Error obteniendo mis tareas:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Actualizar subtarea
+  async updateSubtask(req, res) {
+    try {
+      const { id, subtaskId } = req.params;
+      const { title, completed } = req.body;
+
+      const task = await Task.findById(id);
+      if (!task || !task.isActive) {
+        return sendError(res, 404, 'Tarea no encontrada');
+      }
+
+      const subtask = task.subtasks.id(subtaskId);
+      if (!subtask) {
+        return sendError(res, 404, 'Subtarea no encontrada');
+      }
+
+      if (title) subtask.title = title;
+      if (typeof completed === 'boolean') subtask.completed = completed;
+
+      await task.save();
+
+      sendResponse(res, 200, true, 'Subtarea actualizada exitosamente', {
+        subtask,
+        progress: task.subtaskProgress
+      });
+    } catch (error) {
+      console.error('Error actualizando subtarea:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+}
+
+module.exports = new TaskController();
+
+// ========================================
+// src/controllers/comment.controller.js - Controlador de Comentarios
+// ========================================
+const Comment = require('../models/Comment.model');
+const Project = require('../models/Project.model');
+const Task = require('../models/Task.model');
+const { sendResponse, sendError, createPagination } = require('../utils/response.util');
+
+class CommentController {
+  // Obtener comentarios de un proyecto
+  async getProjectComments(req, res) {
+    try {
+      const { id } = req.params;
+      const page = parseInt(req.query.page) || 1;
+      const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+      const skip = (page - 1) * limit;
+
+      // Verificar acceso al proyecto
+      const project = await Project.findById(id);
+      if (!project) {
+        return sendError(res, 404, 'Proyecto no encontrado');
+      }
+
+      const hasAccess = project.owner.toString() === req.user._id.toString() ||
+                       project.members.some(member => member.user.toString() === req.user._id.toString());
+
+      if (!hasAccess) {
+        return sendError(res, 403, 'No tienes acceso a este proyecto');
+      }
+
+      const comments = await Comment.find({
+        projectId: id,
+        isDeleted: false,
+        parentComment: { $exists: false } // Solo comentarios principales
+      })
+      .populate('author', 'firstName lastName avatar')
+      .populate('mentions.user', 'firstName lastName')
+      .populate({
+        path: 'parentComment',
+        populate: {
+          path: 'author',
+          select: 'firstName lastName avatar'
+        }
+      })
+      .skip(skip)
+      .limit(limit)
+      .sort({ createdAt: -1 });
+
+      // Obtener respuestas para cada comentario
+      for (let comment of comments) {
+        const replies = await Comment.find({
+          parentComment: comment._id,
+          isDeleted: false
+        })
+        .populate('author', 'firstName lastName avatar')
+        .sort({ createdAt: 1 })
+        .limit(5); // Limitar respuestas mostradas
+
+        comment.replies = replies;
+      }
+
+      const total = await Comment.countDocuments({
+        projectId: id,
+        isDeleted: false,
+        parentComment: { $exists: false }
+      });
+
+      sendResponse(res, 200, true, 'Comentarios obtenidos exitosamente', {
+        comments,
+        pagination: createPagination(page, limit, total)
+      });
+    } catch (error) {
+      console.error('Error obteniendo comentarios:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Crear comentario en proyecto
+  async createProjectComment(req, res) {
+    try {
+      const { id } = req.params;
+      const { content, parentComment, mentions } = req.body;
+
+      // Verificar acceso al proyecto
+      const project = await Project.findById(id);
+      if (!project) {
+        return sendError(res, 404, 'Proyecto no encontrado');
+      }
+
+      const hasAccess = project.owner.toString() === req.user._id.toString() ||
+                       project.members.some(member => member.user.toString() === req.user._id.toString());
+
+      if (!hasAccess) {
+        return sendError(res, 403, 'No tienes acceso a este proyecto');
+      }
+
+      // Crear comentario
+      const comment = await Comment.create({
+        content,
+        author: req.user._id,
+        projectId: id,
+        parentComment,
+        mentions
+      });
+
+      await comment.populate('author', 'firstName lastName avatar');
+
+      sendResponse(res, 201, true, 'Comentario creado exitosamente', { comment });
+    } catch (error) {
+      console.error('Error creando comentario:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Actualizar comentario
+  async updateComment(req, res) {
+    try {
+      const { id } = req.params;
+      const { content } = req.body;
+
+      const comment = await Comment.findById(id);
+      if (!comment || comment.isDeleted) {
+        return sendError(res, 404, 'Comentario no encontrado');
+      }
+
+      // Solo el autor puede editar
+      if (comment.author.toString() !== req.user._id.toString()) {
+        return sendError(res, 403, 'Solo puedes editar tus propios comentarios');
+      }
+
+      comment.content = content;
+      comment.isEdited = true;
+      comment.editedAt = new Date();
+      
+      await comment.save();
+      await comment.populate('author', 'firstName lastName avatar');
+
+      sendResponse(res, 200, true, 'Comentario actualizado exitosamente', { comment });
+    } catch (error) {
+      console.error('Error actualizando comentario:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Eliminar comentario
+  async deleteComment(req, res) {
+    try {
+      const { id } = req.params;
+
+      const comment = await Comment.findById(id);
+      if (!comment || comment.isDeleted) {
+        return sendError(res, 404, 'Comentario no encontrado');
+      }
+
+      // Solo el autor o admin pueden eliminar
+      const canDelete = comment.author.toString() === req.user._id.toString() ||
+                       req.user.globalRole.name === 'Admin';
+
+      if (!canDelete) {
+        return sendError(res, 403, 'No tienes permisos para eliminar este comentario');
+      }
+
+      comment.isDeleted = true;
+      comment.deletedAt = new Date();
+      await comment.save();
+
+      sendResponse(res, 200, true, 'Comentario eliminado exitosamente');
+    } catch (error) {
+      console.error('Error eliminando comentario:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Agregar reacción a comentario
+  async addReaction(req, res) {
+    try {
+      const { id } = req.params;
+      const { type = 'like' } = req.body;
+
+      const comment = await Comment.findById(id);
+      if (!comment || comment.isDeleted) {
+        return sendError(res, 404, 'Comentario no encontrado');
+      }
+
+      // Verificar si ya reaccionó
+      const existingReaction = comment.reactions.find(
+        reaction => reaction.user.toString() === req.user._id.toString()
+      );
+
+      if (existingReaction) {
+        existingReaction.type = type;
+      } else {
+        comment.reactions.push({
+          user: req.user._id,
+          type
+        });
+      }
+
+      await comment.save();
+
+      sendResponse(res, 200, true, 'Reacción agregada exitosamente', {
+        reactionSummary: comment.reactionSummary
+      });
+    } catch (error) {
+      console.error('Error agregando reacción:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+}
+
+module.exports = new CommentController();
+
+// ========================================
+// src/controllers/ai.controller.js - Controlador de IA
+// ========================================
+const OpenAI = require('openai');
+const Task = require('../models/Task.model');
+const Project = require('../models/Project.model');
+const Comment = require('../models/Comment.model');
+const { sendResponse, sendError } = require('../utils/response.util');
+
+// Inicializar OpenAI
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
+});
+
+class AIController {
+  // Generar tareas automáticamente
+  async generateTasks(req, res) {
+    try {
+      const { projectDescription, projectId, category, estimatedHours } = req.body;
+
+      // Verificar acceso al proyecto
+      const project = await Project.findById(projectId).populate('category');
+      if (!project) {
+        return sendError(res, 404, 'Proyecto no encontrado');
+      }
+
+      const hasAccess = project.owner.toString() === req.user._id.toString() ||
+                       project.members.some(member => 
+                         member.user.toString() === req.user._id.toString() && 
+                         member.permissions.includes('write')
+                       );
+
+      if (!hasAccess) {
+        return sendError(res, 403, 'No tienes permisos para generar tareas en este proyecto');
+      }
+
+      // Crear prompt para OpenAI
+      const prompt = this.createTaskGenerationPrompt(projectDescription, project.category.name, estimatedHours);
+
+      try {
+        const completion = await openai.chat.completions.create({
+          model: 'gpt-4',
+          messages: [
+            {
+              role: 'system',
+              content: 'Eres un experto project manager que genera tareas detalladas y realistas para proyectos de desarrollo de software.'
+            },
+            {
+              role: 'user',
+              content: prompt
+            }
+          ],
+          temperature: 0.7,
+          max_tokens: 2000
+        });
+
+        const aiResponse = completion.choices[0].message.content;
+        const generatedTasks = this.parseAITaskResponse(aiResponse);
+
+        // Opcional: Crear las tareas automáticamente si se especifica
+        if (req.body.autoCreate) {
+          const createdTasks = await this.createTasksFromAI(generatedTasks, projectId, req.user._id);
+          
+          sendResponse(res, 201, true, 'Tareas generadas y creadas exitosamente', {
+            generatedTasks,
+            createdTasks,
+            aiMetadata: {
+              prompt,
+              model: 'gpt-4',
+              generatedAt: new Date()
+            }
+          });
+        } else {
+          sendResponse(res, 200, true, 'Tareas generadas exitosamente', {
+            generatedTasks,
+            aiMetadata: {
+              prompt,
+              model: 'gpt-4',
+              generatedAt: new Date()
+            }
+          });
+        }
+      } catch (aiError) {
+        console.error('Error con OpenAI:', aiError);
+        sendError(res, 500, 'Error generando tareas con IA');
+      }
+    } catch (error) {
+      console.error('Error en generación de tareas:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Analizar proyecto y sugerir mejoras
+  async analyzeProject(req, res) {
+    try {
+      const { projectId } = req.body;
+
+      const project = await Project.findById(projectId)
+        .populate('category')
+        .populate('status')
+        .populate('owner', 'firstName lastName')
+        .populate('members.user', 'firstName lastName');
+
+      if (!project) {
+        return sendError(res, 404, 'Proyecto no encontrado');
+      }
+
+      // Obtener tareas del proyecto
+      const tasks = await Task.find({ project: projectId, isActive: true })
+        .populate('status', 'name')
+        .populate('assignedTo', 'firstName lastName');
+
+      // Obtener comentarios recientes
+      const recentComments = await Comment.find({
+        projectId,
+        createdAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
+        isDeleted: false
+      }).populate('author', 'firstName lastName');
+
+      // Crear análisis con IA
+      const analysisPrompt = this.createProjectAnalysisPrompt(project, tasks, recentComments);
+
+      try {
+        const completion = await openai.chat.completions.create({
+          model: 'gpt-4',
+          messages: [
+            {
+              role: 'system',
+              content: 'Eres un consultor senior en gestión de proyectos que analiza el estado de proyectos y proporciona recomendaciones estratégicas.'
+            },
+            {
+              role: 'user',
+              content: analysisPrompt
+            }
+          ],
+          temperature: 0.3,
+          max_tokens: 1500
+        });
+
+        const analysis = completion.choices[0].message.content;
+        const parsedAnalysis = this.parseProjectAnalysis(analysis);
+
+        sendResponse(res, 200, true, 'Análisis de proyecto completado', {
+          analysis: parsedAnalysis,
+          projectStats: {
+            totalTasks: tasks.length,
+            completedTasks: tasks.filter(t => t.completedAt).length,
+            overdueTasks: tasks.filter(t => t.dueDate < new Date() && !t.completedAt).length,
+            progress: project.progress,
+            daysRemaining: project.daysRemaining
+          },
+          aiMetadata: {
+            analyzedAt: new Date(),
+            model: 'gpt-4'
+          }
+        });
+      } catch (aiError) {
+        console.error('Error con análisis de IA:', aiError);
+        sendError(res, 500, 'Error analizando proyecto con IA');
+      }
+    } catch (error) {
+      console.error('Error en análisis de proyecto:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Estimar tiempo de tareas
+  async estimateTime(req, res) {
+    try {
+      const { taskDescription, complexity, technology, teamExperience } = req.body;
+
+      const estimationPrompt = this.createTimeEstimationPrompt(
+        taskDescription, 
+        complexity, 
+        technology, 
+        teamExperience
+      );
+
+      try {
+        const completion = await openai.chat.completions.create({
+          model: 'gpt-4',
+          messages: [
+            {
+              role: 'system',
+              content: 'Eres un technical lead experto que proporciona estimaciones precisas de tiempo para tareas de desarrollo.'
+            },
+            {
+              role: 'user',
+              content: estimationPrompt
+            }
+          ],
+          temperature: 0.2,
+          max_tokens: 800
+        });
+
+        const estimation = completion.choices[0].message.content;
+        const parsedEstimation = this.parseTimeEstimation(estimation);
+
+        sendResponse(res, 200, true, 'Estimación de tiempo completada', {
+          estimation: parsedEstimation,
+          aiMetadata: {
+            estimatedAt: new Date(),
+            model: 'gpt-4',
+            confidence: parsedEstimation.confidence || 0.8
+          }
+        });
+      } catch (aiError) {
+        console.error('Error con estimación de IA:', aiError);
+        sendError(res, 500, 'Error estimando tiempo con IA');
+      }
+    } catch (error) {
+      console.error('Error en estimación de tiempo:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Generar resumen de progreso
+  async generateSummary(req, res) {
+    try {
+      const { projectId, period = 'week' } = req.body;
+
+      const project = await Project.findById(projectId)
+        .populate('category')
+        .populate('status');
+
+      if (!project) {
+        return sendError(res, 404, 'Proyecto no encontrado');
+      }
+
+      // Calcular fechas según el período
+      const now = new Date();
+      let startDate;
+      
+      switch (period) {
+        case 'week':
+          startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          break;
+        case 'month':
+          startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+          break;
+        default:
+          startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      }
+
+      // Obtener datos del período
+      const tasksInPeriod = await Task.find({
+        project: projectId,
+        createdAt: { $gte: startDate },
+        isActive: true
+      }).populate('assignedTo', 'firstName lastName');
+
+      const completedTasks = await Task.find({
+        project: projectId,
+        completedAt: { $gte: startDate },
+        isActive: true
+      }).populate('assignedTo', 'firstName lastName');
+
+      const summaryPrompt = this.createProgressSummaryPrompt(
+        project, 
+        tasksInPeriod, 
+        completedTasks, 
+        period
+      );
+
+      try {
+        const completion = await openai.chat.completions.create({
+          model: 'gpt-4',
+          messages: [
+            {
+              role: 'system',
+              content: 'Eres un project manager que crea resúmenes ejecutivos claros y accionables sobre el progreso de proyectos.'
+            },
+            {
+              role: 'user',
+              content: summaryPrompt
+            }
+          ],
+          temperature: 0.4,
+          max_tokens: 1200
+        });
+
+        const summary = completion.choices[0].message.content;
+
+        sendResponse(res, 200, true, 'Resumen generado exitosamente', {
+          summary,
+          period,
+          stats: {
+            tasksCreated: tasksInPeriod.length,
+            tasksCompleted: completedTasks.length,
+            currentProgress: project.progress,
+            totalTasks: await Task.countDocuments({ project: projectId, isActive: true })
+          },
+          aiMetadata: {
+            generatedAt: new Date(),
+            model: 'gpt-4',
+            period
+          }
+        });
+      } catch (aiError) {
+        console.error('Error generando resumen:', aiError);
+        sendError(res, 500, 'Error generando resumen con IA');
+      }
+    } catch (error) {
+      console.error('Error en generación de resumen:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Métodos auxiliares para crear prompts
+  createTaskGenerationPrompt(description, category, estimatedHours) {
+    return `
+Genera una lista de tareas específicas y detalladas para el siguiente proyecto:
+
+DESCRIPCIÓN DEL PROYECTO:
+${description}
+
+CATEGORÍA: ${category}
+HORAS ESTIMADAS TOTALES: ${estimatedHours || 'No especificado'}
+
+Por favor, genera entre 8-15 tareas que sean:
+1. Específicas y accionables
+2. Apropiadas para la categoría del proyecto
+3. Ordenadas lógicamente por dependencias
+4. Con estimaciones de tiempo realistas
+
+Formato de respuesta (JSON):
+{
+  "tasks": [
+    {
+      "title": "Título de la tarea",
+      "description": "Descripción detallada de qué hacer",
+      "estimatedHours": número,
+      "priority": "Low|Medium|High|Critical",
+      "tags": ["tag1", "tag2"],
+      "dependencies": ["título de tarea previa si aplica"]
+    }
+  ]
+}
+    `;
+  }
+
+  createProjectAnalysisPrompt(project, tasks, comments) {
+    const tasksSummary = tasks.map(t => `- ${t.title} (${t.status.name})`).join('\n');
+    const commentsSummary = comments.slice(0, 5).map(c => `- ${c.content.substring(0, 100)}...`).join('\n');
+
+    return `
+Analiza el siguiente proyecto y proporciona recomendaciones:
+
+PROYECTO: ${project.name}
+DESCRIPCIÓN: ${project.description}
+PROGRESO: ${project.progress}%
+ESTADO: ${project.status.name}
+MIEMBROS: ${project.members.length}
+
+TAREAS (${tasks.length} total):
+${tasksSummary}
+
+COMENTARIOS RECIENTES:
+${commentsSummary}
+
+Por favor analiza:
+1. Estado general del proyecto
+2. Posibles riesgos o bloqueos
+3. Recomendaciones para mejorar eficiencia
+4. Sugerencias para el equipo
+
+Responde en formato JSON:
+{
+  "overallHealth": "Excellent|Good|Fair|Poor",
+  "risks": ["riesgo1", "riesgo2"],
+  "recommendations": ["recomendación1", "recomendación2"],
+  "nextSteps": ["paso1", "paso2"]
+}
+    `;
+  }
+
+  createTimeEstimationPrompt(description, complexity, technology, experience) {
+    return `
+Estima el tiempo necesario para completar esta tarea:
+
+DESCRIPCIÓN: ${description}
+COMPLEJIDAD: ${complexity || 'Media'}
+TECNOLOGÍA: ${technology || 'General'}
+EXPERIENCIA DEL EQUIPO: ${experience || 'Intermedia'}
+
+Proporciona:
+1. Estimación optimista (todo sale bien)
+2. Estimación realista (escenario normal)
+3. Estimación pesimista (con complicaciones)
+4. Recomendación final
+5. Factores de riesgo
+
+Formato JSON:
+{
+  "optimistic": horas,
+  "realistic": horas,
+  "pessimistic": horas,
+  "recommended": horas,
+  "confidence": 0.1-1.0,
+  "riskFactors": ["factor1", "factor2"],
+  "breakdown": ["subtarea1: X horas", "subtarea2: Y horas"]
+}
+    `;
+  }
+
+  createProgressSummaryPrompt(project, newTasks, completedTasks, period) {
+    return `
+Crea un resumen ejecutivo del progreso del proyecto en la última ${period === 'week' ? 'semana' : 'mes'}:
+
+PROYECTO: ${project.name}
+PROGRESO ACTUAL: ${project.progress}%
+
+NUEVAS TAREAS (${newTasks.length}):
+${newTasks.map(t => `- ${t.title}`).join('\n')}
+
+TAREAS COMPLETADAS (${completedTasks.length}):
+${completedTasks.map(t => `- ${t.title}`).join('\n')}
+
+Genera un resumen que incluya:
+1. Logros principales
+2. Métricas de productividad
+3. Desafíos enfrentados
+4. Próximos pasos
+5. Recomendaciones
+
+Mantén un tono profesional y ejecutivo.
+    `;
+  }
+
+  // Métodos auxiliares para parsear respuestas de IA
+  parseAITaskResponse(response) {
+    try {
+      // Intentar parsear como JSON
+      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        return JSON.parse(jsonMatch[0]);
+      }
+      
+      // Si no es JSON, parsear manualmente
+      return this.parseTasksFromText(response);
+    } catch (error) {
+      console.error('Error parseando respuesta de IA:', error);
+      return { tasks: [] };
+    }
+  }
+
+  async createTasksFromAI(generatedTasks, projectId, userId) {
+    const createdTasks = [];
+    
+    // Obtener estado inicial
+    const initialState = await State.findOne({
+      type: 'Task',
+      isInitial: true,
+      isActive: true
+    });
+
+    for (const taskData of generatedTasks.tasks || []) {
+      try {
+        const task = await Task.create({
+          title: taskData.title,
+          description: taskData.description,
+          project: projectId,
+          createdBy: userId,
+          status: initialState._id,
+          priority: taskData.priority || 'Medium',
+          estimatedHours: taskData.estimatedHours || 0,
+          dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 días por defecto
+          tags: taskData.tags || [],
+          aiGenerated: true,
+          aiMetadata: {
+            confidence: 0.8,
+            estimationSource: 'AI Generation',
+            generatedPrompt: 'Task generation from project description'
+          }
+        });
+
+        createdTasks.push(task);
+      } catch (error) {
+        console.error('Error creando tarea generada por IA:', error);
+      }
+    }
+
+    return createdTasks;
+  }
+
+  parseTasksFromText(text) {
+    // Implementar parser simple para texto plano
+    const tasks = [];
+    const lines = text.split('\n');
+    
+    let currentTask = null;
+    
+    for (const line of lines) {
+      if (line.match(/^\d+\./)) {
+        if (currentTask) tasks.push(currentTask);
+        currentTask = {
+          title: line.replace(/^\d+\.\s*/, ''),
+          description: '',
+          estimatedHours: 8,
+          priority: 'Medium',
+          tags: []
+        };
+      } else if (currentTask && line.trim()) {
+        currentTask.description += line.trim() + ' ';
+      }
+    }
+    
+    if (currentTask) tasks.push(currentTask);
+    
+    return { tasks };
+  }
+
+  parseProjectAnalysis(analysis) {
+    try {
+      const jsonMatch = analysis.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        return JSON.parse(jsonMatch[0]);
+      }
+    } catch (error) {
+      console.error('Error parseando análisis:', error);
+    }
+    
+    return {
+      overallHealth: 'Good',
+      risks: [],
+      recommendations: [analysis],
+      nextSteps: []
+    };
+  }
+
+  parseTimeEstimation(estimation) {
+    try {
+      const jsonMatch = estimation.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        return JSON.parse(jsonMatch[0]);
+      }
+    } catch (error) {
+      console.error('Error parseando estimación:', error);
+    }
+    
+    return {
+      optimistic: 4,
+      realistic: 8,
+      pessimistic: 16,
+      recommended: 8,
+      confidence: 0.7,
+      riskFactors: [],
+      breakdown: []
+    };
+  }
+}
+
+module.exports = new AIController();
+
+// ========================================
+// src/routes/task.routes.js - Rutas de Tareas
+// ========================================
+const express = require('express');
+const router = express.Router();
+const taskController = require('../controllers/task.controller');
+const { authenticate } = require('../middlewares/auth.middleware');
+const { validateTask, validateTaskStatus, validateAssignment } = require('../validators/task.validator');
+const { validateRequest } = require('../middlewares/validation.middleware');
+
+// Todas las rutas requieren autenticación
+router.use(authenticate);
+
+// Rutas de tareas
+router.get('/my-tasks', taskController.getMyTasks);
+router.get('/projects/:projectId/tasks', taskController.getProjectTasks);
+router.post('/projects/:projectId/tasks', validateTask, validateRequest, taskController.createTask);
+router.get('/:id', taskController.getTask);
+router.put('/:id', validateTask, validateRequest, taskController.updateTask);
+router.put('/:id/status', validateTaskStatus, validateRequest, taskController.changeTaskStatus);
+router.put('/:id/assign', validateAssignment, validateRequest, taskController.assignTask);
+router.put('/:id/subtasks/:subtaskId', taskController.updateSubtask);
+
+module.exports = router;
+
+// ========================================
+// src/routes/comment.routes.js - Rutas de Comentarios
+// ========================================
+const express = require('express');
+const router = express.Router();
+const commentController = require('../controllers/comment.controller');
+const { authenticate } = require('../middlewares/auth.middleware');
+const { validateComment } = require('../validators/comment.validator');
+const { validateRequest } = require('../middlewares/validation.middleware');
+
+// Todas las rutas requieren autenticación
+router.use(authenticate);
+
+// Rutas de comentarios
+router.get('/projects/:id/comments', commentController.getProjectComments);
+router.post('/projects/:id/comments', validateComment, validateRequest, commentController.createProjectComment);
+router.put('/:id', validateComment, validateRequest, commentController.updateComment);
+router.delete('/:id', commentController.deleteComment);
+router.post('/:id/reactions', commentController.addReaction);
+
+module.exports = router;
+
+// ========================================
+// src/routes/ai.routes.js - Rutas de IA
+// ========================================
+const express = require('express');
+const router = express.Router();
+const aiController = require('../controllers/ai.controller');
+const { authenticate } = require('../middlewares/auth.middleware');
+const { validateAIRequest } = require('../validators/ai.validator');
+const { validateRequest } = require('../middlewares/validation.middleware');
+
+// Todas las rutas requieren autenticación
+router.use(authenticate);
+
+// Rutas de IA
+router.post('/generate-tasks', validateAIRequest.generateTasks, validateRequest, aiController.generateTasks);
+router.post('/analyze-project', validateAIRequest.analyzeProject, validateRequest, aiController.analyzeProject);
+router.post('/estimate-time', validateAIRequest.estimateTime, validateRequest, aiController.estimateTime);
+router.post('/generate-summary', validateAIRequest.generateSummary, validateRequest, aiController.generateSummary);
+
+module.exports = router;
+
+// ========================================
+// src/validators/task.validator.js - Validaciones de Tareas
+// ========================================
+const { body, param } = require('express-validator');
+
+const validateTask = [
+  body('title')
+    .trim()
+    .isLength({ min: 3, max: 100 })
+    .withMessage('El título debe tener entre 3 y 100 caracteres'),
+
+  body('description')
+    .trim()
+    .isLength({ min: 10, max: 1000 })
+    .withMessage('La descripción debe tener entre 10 y 1000 caracteres'),
+
+  body('assignedTo')
+    .optional()
+    .isMongoId()
+    .withMessage('ID de usuario asignado inválido'),
+
+  body('priority')
+    .optional()
+    .isIn(['Low', 'Medium', 'High', 'Critical'])
+    .withMessage('Prioridad inválida'),
+
+  body('estimatedHours')
+    .optional()
+    .isFloat({ min: 0 })
+    .withMessage('Las horas estimadas deben ser un número positivo'),
+
+  body('dueDate')
+    .isISO8601()
+    .withMessage('Fecha límite inválida'),
+
+  body('tags')
+    .optional()
+    .isArray()
+    .withMessage('Los tags deben ser un array'),
+
+  body('tags.*')
+    .optional()
+    .isLength({ min: 1, max: 20 })
+    .withMessage('Cada tag debe tener entre 1 y 20 caracteres'),
+
+  body('subtasks')
+    .optional()
+    .isArray()
+    .withMessage('Las subtareas deben ser un array'),
+
+  body('subtasks.*.title')
+    .optional()
+    .isLength({ min: 1, max: 200 })
+    .withMessage('El título de la subtarea debe tener entre 1 y 200 caracteres')
+];
+
+const validateTaskStatus = [
+  body('statusId')
+    .isMongoId()
+    .withMessage('ID de estado inválido')
+];
+
+const validateAssignment = [
+  body('userId')
+    .isMongoId()
+    .withMessage('ID de usuario inválido')
+];
+
+module.exports = {
+  validateTask,
+  validateTaskStatus,
+  validateAssignment
+};
+
+// ========================================
+// src/validators/comment.validator.js - Validaciones de Comentarios
+// ========================================
+const { body } = require('express-validator');
+
+const validateComment = [
+  body('content')
+    .trim()
+    .isLength({ min: 1, max: 2000 })
+    .withMessage('El contenido debe tener entre 1 y 2000 caracteres'),
+
+  body('parentComment')
+    .optional()
+    .isMongoId()
+    .withMessage('ID de comentario padre inválido'),
+
+  body('mentions')
+    .optional()
+    .isArray()
+    .withMessage('Las menciones deben ser un array'),
+
+  body('mentions.*.user')
+    .optional()
+    .isMongoId()
+    .withMessage('ID de usuario mencionado inválido')
+];
+
+module.exports = {
+  validateComment
+};
+
+// ========================================
+// src/validators/ai.validator.js - Validaciones de IA
+// ========================================
+const { body } = require('express-validator');
+
+const generateTasks = [
+  body('projectDescription')
+    .trim()
+    .isLength({ min: 20, max: 2000 })
+    .withMessage('La descripción del proyecto debe tener entre 20 y 2000 caracteres'),
+
+  body('projectId')
+    .isMongoId()
+    .withMessage('ID de proyecto inválido'),
+
+  body('estimatedHours')
+    .optional()
+    .isFloat({ min: 1 })
+    .withMessage('Las horas estimadas deben ser un número positivo'),
+
+  body('autoCreate')
+    .optional()
+    .isBoolean()
+    .withMessage('autoCreate debe ser un booleano')
+];
+
+const analyzeProject = [
+  body('projectId')
+    .isMongoId()
+    .withMessage('ID de proyecto inválido')
+];
+
+const estimateTime = [
+  body('taskDescription')
+    .trim()
+    .isLength({ min: 10, max: 1000 })
+    .withMessage('La descripción de la tarea debe tener entre 10 y 1000 caracteres'),
+
+  body('complexity')
+    .optional()
+    .isIn(['Low', 'Medium', 'High', 'Very High'])
+    .withMessage('Complejidad inválida'),
+
+  body('technology')
+    .optional()
+    .trim()
+    .isLength({ max: 100 })
+    .withMessage('La tecnología no puede exceder 100 caracteres'),
+
+  body('teamExperience')
+    .optional()
+    .isIn(['Junior', 'Intermediate', 'Senior', 'Expert'])
+    .withMessage('Experiencia del equipo inválida')
+];
+
+const generateSummary = [
+  body('projectId')
+    .isMongoId()
+    .withMessage('ID de proyecto inválido'),
+
+  body('period')
+    .optional()
+    .isIn(['week', 'month'])
+    .withMessage('Período inválido (week o month)')
+];
+
+module.exports = {
+  validateAIRequest: {
+    generateTasks,
+    analyzeProject,
+    estimateTime,
+    generateSummary
+  }
+};
+
+// ========================================
+// tests/tasks.test.js - Tests de Tareas
+// ========================================
+const request = require('supertest');
+const app = require('../server');
+const Task = require('../src/models/Task.model');
+const Project = require('../src/models/Project.model');
+const State = require('../src/models/State.model');
+const User = require('../src/models/User.model');
+const Role = require('../src/models/Role.model');
+const Category = require('../src/models/Category.model');
+
+describe('Task Endpoints', () => {
+  let authToken;
+  let testUser;
+  let testProject;
+  let testState;
+  let devRole;
+
+  beforeAll(async () => {
+    // Crear rol developer
+    devRole = await Role.create({
+      name: 'Developer',
+      description: 'Desarrollador',
+      permissions: []
+    });
+
+    // Crear usuario de prueba
+    testUser = await User.create({
+      firstName: 'Test',
+      lastName: 'Developer',
+      email: 'dev@test.com',
+      password: 'password123',
+      globalRole: devRole._id,
+      isEmailVerified: true
+    });
+
+    // Crear categoría y estado
+    const category = await Category.create({
+      name: 'Test',
+      description: 'Test category',
+      createdBy: testUser._id
+    });
+
+    testState = await State.create({
+      name: 'Pendiente',
+      type: 'Task',
+      isInitial: true,
+      color: '#6c757d'
+    });
+
+    const projectState = await State.create({
+      name: 'En Progreso',
+      type: 'Project',
+      color: '#007bff'
+    });
+
+    // Crear proyecto de prueba
+    testProject = await Project.create({
+      name: 'Test Project',
+      description: 'Test project for tasks',
+      category: category._id,
+      owner: testUser._id,
+      status: projectState._id,
+      startDate: new Date(),
+      endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      members: [{
+        user: testUser._id,
+        role: devRole._id,
+        permissions: ['read', 'write', 'manage']
+      }]
+    });
+
+    // Obtener token
+    const loginResponse = await request(app)
+      .post('/api/auth/login')
+      .send({
+        email: 'dev@test.com',
+        password: 'password123'
+      });
+
+    authToken = loginResponse.body.data.tokens.accessToken;
+  });
+
+  beforeEach(async () => {
+    await Task.deleteMany({});
+  });
+
+  describe('POST /api/tasks/projects/:projectId/tasks', () => {
+    test('Should create a new task', async () => {
+      const taskData = {
+        title: 'Implement user authentication',
+        description: 'Create login and registration functionality',
+        priority: 'High',
+        estimatedHours: 16,
+        dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        tags: ['auth', 'security'],
+        subtasks: [
+          { title: 'Design login form', completed: false },
+          { title: 'Implement JWT', completed: false }
+        ]
+      };
+
+      const response = await request(app)
+        .post(`/api/tasks/projects/${testProject._id}/tasks`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send(taskData);
+
+      expect(response.status).toBe(201);
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.task.title).toBe(taskData.title);
+      expect(response.body.data.task.subtasks).toHaveLength(2);
+    });
+  });
+
+  describe('GET /api/tasks/my-tasks', () => {
+    beforeEach(async () => {
+      // Crear tarea asignada al usuario
+      await Task.create({
+        title: 'My assigned task',
+        description: 'Task assigned to me',
+        project: testProject._id,
+        assignedTo: testUser._id,
+        createdBy: testUser._id,
+        status: testState._id,
+        dueDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000)
+      });
+    });
+
+    test('Should get user assigned tasks', async () => {
+      const response = await request(app)
+        .get('/api/tasks/my-tasks')
+        .set('Authorization', `Bearer ${authToken}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.tasks).toHaveLength(1);
+      expect(response.body.data.stats).toBeDefined();
+    });
+
+    test('Should filter overdue tasks', async () => {
+      // Crear tarea vencida
+      await Task.create({
+        title: 'Overdue task',
+        description: 'This task is overdue',
+        project: testProject._id,
+        assignedTo: testUser._id,
+        createdBy: testUser._id,
+        status: testState._id,
+        dueDate: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000) // 2 días atrás
+      });
+
+      const response = await request(app)
+        .get('/api/tasks/my-tasks?dueDate=overdue')
+        .set('Authorization', `Bearer ${authToken}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.data.tasks).toHaveLength(1);
+    });
+  });
+
+  describe('PUT /api/tasks/:id/status', () => {
+    let testTask;
+    let completedState;
+
+    beforeEach(async () => {
+      completedState = await State.create({
+        name: 'Completada',
+        type: 'Task',
+        isFinal: true,
+        color: '#28a745'
+      });
+
+      testTask = await Task.create({
+        title: 'Test task',
+        description: 'Task for status change',
+        project: testProject._id,
+        assignedTo: testUser._id,
+        createdBy: testUser._id,
+        status: testState._id,
+        dueDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000)
+      });
+    });
+
+    test('Should change task status', async () => {
+      const response = await request(app)
+        .put(`/api/tasks/${testTask._id}/status`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ statusId: completedState._id });
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.task.completedAt).toBeDefined();
+    });
+  });
+});
+
+// ========================================
+// Configuración específica para Mariam
+// ========================================
+// .env example additions para IA
+/*
+# OpenAI Configuration
+OPENAI_API_KEY=sk-your_openai_api_key_here
+OPENAI_MODEL=gpt-4
+OPENAI_MAX_TOKENS=2000
+
+# AI Features
+AI_TASK_GENERATION_ENABLED=true
+AI_TIME_ESTIMATION_ENABLED=true
+AI_PROJECT_ANALYSIS_ENABLED=true
+*/
+
+// package.json dependencies additions
+/*
+{
+  "openai": "^4.0.0"
+}
+*/
+
+// scripts/seed-tasks.js - Script para crear tareas de ejemplo
+const mongoose = require('mongoose');
+const Task = require('../src/models/Task.model');
+const Project = require('../src/models/Project.model');
+const State = require('../src/models/State.model');
+const User = require('../src/models/User.model');
+require('dotenv').config();
+
+const seedTasks = async () => {
+  try {
+    await mongoose.connect(process.env.MONGODB_URI);
+    console.log('Conectado a MongoDB');
+
+    const project = await Project.findOne().populate('owner');
+    const taskState = await State.findOne({ type: 'Task', isInitial: true });
+    const user = await User.findOne();
+
+    if (!project || !taskState || !user) {
+      console.log('Faltan datos básicos para crear tareas');
+      return;
+    }
+
+    await Task.deleteMany({});
+
+    const sampleTasks = [
+      {
+        title: 'Diseñar interfaz de usuario principal',
+        description: 'Crear wireframes y mockups para la pantalla principal de la aplicación',
+        project: project._id,
+        assignedTo: user._id,
+        createdBy: user._id,
+        status: taskState._id,
+        priority: 'High',
+        estimatedHours: 12,
+        dueDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+        tags: ['ui', 'design'],
+        subtasks: [
+          { title: 'Crear wireframes', completed: true },
+          { title: 'Diseñar mockups', completed: false },
+          { title: 'Revisar con el equipo', completed: false }
+        ]
+      },
+      {
+        title: 'Implementar autenticación de usuarios',
+        description: 'Desarrollar sistema completo de login, registro y recuperación de contraseña',
+        project: project._id,
+        assignedTo: user._id,
+        createdBy: user._id,
+        status: taskState._id,
+        priority: 'Critical',
+        estimatedHours: 20,
+        dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        tags: ['auth', 'security', 'backend'],
+        aiGenerated: true,
+        aiMetadata: {
+          confidence: 0.9,
+          estimationSource: 'AI Generation',
+          generatedPrompt: 'Generate authentication tasks'
+        }
+      },
+      {
+        title: 'Configurar base de datos',
+        description: 'Configurar MongoDB, crear esquemas y establecer conexiones',
+        project: project._id,
+        createdBy: user._id,
+        status: taskState._id,
+        priority: 'High',
+        estimatedHours: 8,
+        dueDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+        tags: ['database', 'mongodb', 'setup']
+      }
+    ];
+
+    for (const taskData of sampleTasks) {
+      const task = await Task.create(taskData);
+      console.log(`✅ Tarea creada: ${task.title}`);
+    }
+
+    console.log('🎉 Tareas de ejemplo creadas correctamente');
+    process.exit(0);
+  } catch (error) {
+    console.error('❌ Error creando tareas:', error);
+    process.exit(1);
+  }
+};
+
+if (require.main === module) {
+  seedTasks();
+}
+
+module.exports = seedTasks;
