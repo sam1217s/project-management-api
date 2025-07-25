@@ -1,0 +1,1162 @@
+// ========================================
+// FRANKLIN PEÑA - MÓDULO DE GESTIÓN BASE, ESTADOS Y UPLOAD
+// ========================================
+
+// src/models/Category.model.js - Modelo de Categorías
+const mongoose = require('mongoose');
+
+const categorySchema = new mongoose.Schema({
+  name: {
+    type: String,
+    required: [true, 'El nombre de la categoría es requerido'],
+    unique: true,
+    trim: true,
+    maxlength: [50, 'El nombre no puede exceder 50 caracteres']
+  },
+  description: {
+    type: String,
+    required: [true, 'La descripción es requerida'],
+    maxlength: [200, 'La descripción no puede exceder 200 caracteres']
+  },
+  color: {
+    type: String,
+    default: '#007bff',
+    match: [/^#[0-9A-F]{6}$/i, 'Color inválido (debe ser formato hex)']
+  },
+  icon: {
+    type: String,
+    default: 'folder'
+  },
+  isActive: {
+    type: Boolean,
+    default: true
+  },
+  createdBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  }
+}, {
+  timestamps: true
+});
+
+// Índices
+categorySchema.index({ name: 1 });
+categorySchema.index({ isActive: 1 });
+categorySchema.index({ createdBy: 1 });
+
+module.exports = mongoose.model('Category', categorySchema);
+
+// ========================================
+// src/models/State.model.js - Modelo de Estados
+// ========================================
+const mongoose = require('mongoose');
+
+const stateSchema = new mongoose.Schema({
+  name: {
+    type: String,
+    required: [true, 'El nombre del estado es requerido'],
+    trim: true,
+    maxlength: [50, 'El nombre no puede exceder 50 caracteres']
+  },
+  description: {
+    type: String,
+    maxlength: [200, 'La descripción no puede exceder 200 caracteres']
+  },
+  type: {
+    type: String,
+    required: [true, 'El tipo es requerido'],
+    enum: ['Project', 'Task'],
+    index: true
+  },
+  color: {
+    type: String,
+    default: '#6c757d',
+    match: [/^#[0-9A-F]{6}$/i, 'Color inválido (debe ser formato hex)']
+  },
+  order: {
+    type: Number,
+    default: 0
+  },
+  isInitial: {
+    type: Boolean,
+    default: false
+  },
+  isFinal: {
+    type: Boolean,
+    default: false
+  },
+  allowedTransitions: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'State'
+  }],
+  isActive: {
+    type: Boolean,
+    default: true
+  }
+}, {
+  timestamps: true
+});
+
+// Índices compuestos
+stateSchema.index({ type: 1, isActive: 1 });
+stateSchema.index({ type: 1, order: 1 });
+stateSchema.index({ isInitial: 1, type: 1 });
+
+module.exports = mongoose.model('State', stateSchema);
+
+// ========================================
+// src/controllers/category.controller.js - Controlador de Categorías
+// ========================================
+const Category = require('../models/Category.model');
+const { sendResponse, sendError } = require('../utils/response.util');
+
+class CategoryController {
+  // Obtener todas las categorías
+  async getCategories(req, res) {
+    try {
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 10;
+      const skip = (page - 1) * limit;
+      const search = req.query.search || '';
+
+      // Filtro de búsqueda
+      const filter = { isActive: true };
+      if (search) {
+        filter.$or = [
+          { name: { $regex: search, $options: 'i' } },
+          { description: { $regex: search, $options: 'i' } }
+        ];
+      }
+
+      const categories = await Category.find(filter)
+        .populate('createdBy', 'firstName lastName')
+        .skip(skip)
+        .limit(limit)
+        .sort({ createdAt: -1 });
+
+      const total = await Category.countDocuments(filter);
+
+      sendResponse(res, 200, true, 'Categorías obtenidas exitosamente', {
+        categories,
+        pagination: {
+          currentPage: page,
+          totalPages: Math.ceil(total / limit),
+          totalItems: total,
+          itemsPerPage: limit
+        }
+      });
+    } catch (error) {
+      console.error('Error obteniendo categorías:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Crear nueva categoría
+  async createCategory(req, res) {
+    try {
+      const { name, description, color, icon } = req.body;
+
+      // Verificar si ya existe
+      const existingCategory = await Category.findOne({ 
+        name: { $regex: new RegExp(`^${name}$`, 'i') },
+        isActive: true 
+      });
+
+      if (existingCategory) {
+        return sendError(res, 400, 'Ya existe una categoría con ese nombre');
+      }
+
+      const category = await Category.create({
+        name,
+        description,
+        color,
+        icon,
+        createdBy: req.user._id
+      });
+
+      await category.populate('createdBy', 'firstName lastName');
+
+      sendResponse(res, 201, true, 'Categoría creada exitosamente', { category });
+    } catch (error) {
+      console.error('Error creando categoría:', error);
+      if (error.code === 11000) {
+        return sendError(res, 400, 'Ya existe una categoría con ese nombre');
+      }
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Actualizar categoría
+  async updateCategory(req, res) {
+    try {
+      const { id } = req.params;
+      const { name, description, color, icon } = req.body;
+
+      const category = await Category.findById(id);
+      if (!category || !category.isActive) {
+        return sendError(res, 404, 'Categoría no encontrada');
+      }
+
+      // Verificar nombre único (excluyendo la categoría actual)
+      if (name && name !== category.name) {
+        const existingCategory = await Category.findOne({
+          name: { $regex: new RegExp(`^${name}$`, 'i') },
+          isActive: true,
+          _id: { $ne: id }
+        });
+
+        if (existingCategory) {
+          return sendError(res, 400, 'Ya existe una categoría con ese nombre');
+        }
+      }
+
+      const updatedCategory = await Category.findByIdAndUpdate(
+        id,
+        { name, description, color, icon },
+        { new: true, runValidators: true }
+      ).populate('createdBy', 'firstName lastName');
+
+      sendResponse(res, 200, true, 'Categoría actualizada exitosamente', { 
+        category: updatedCategory 
+      });
+    } catch (error) {
+      console.error('Error actualizando categoría:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Eliminar categoría (soft delete)
+  async deleteCategory(req, res) {
+    try {
+      const { id } = req.params;
+
+      const category = await Category.findById(id);
+      if (!category || !category.isActive) {
+        return sendError(res, 404, 'Categoría no encontrada');
+      }
+
+      category.isActive = false;
+      await category.save();
+
+      sendResponse(res, 200, true, 'Categoría eliminada exitosamente');
+    } catch (error) {
+      console.error('Error eliminando categoría:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+}
+
+module.exports = new CategoryController();
+
+// ========================================
+// src/controllers/state.controller.js - Controlador de Estados
+// ========================================
+const State = require('../models/State.model');
+const { sendResponse, sendError } = require('../utils/response.util');
+
+class StateController {
+  // Obtener estados por tipo
+  async getStatesByType(req, res) {
+    try {
+      const { type } = req.params; // 'projects' o 'tasks'
+      const stateType = type === 'projects' ? 'Project' : 'Task';
+
+      const states = await State.find({ 
+        type: stateType, 
+        isActive: true 
+      })
+      .populate('allowedTransitions', 'name color')
+      .sort({ order: 1, createdAt: 1 });
+
+      sendResponse(res, 200, true, `Estados de ${type} obtenidos exitosamente`, { 
+        states 
+      });
+    } catch (error) {
+      console.error('Error obteniendo estados:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Crear nuevo estado
+  async createState(req, res) {
+    try {
+      const { name, description, type, color, order, isInitial, isFinal, allowedTransitions } = req.body;
+
+      // Si es estado inicial, verificar que no haya otro
+      if (isInitial) {
+        const existingInitial = await State.findOne({ 
+          type, 
+          isInitial: true, 
+          isActive: true 
+        });
+        
+        if (existingInitial) {
+          return sendError(res, 400, `Ya existe un estado inicial para ${type}`);
+        }
+      }
+
+      const state = await State.create({
+        name,
+        description,
+        type,
+        color,
+        order,
+        isInitial,
+        isFinal,
+        allowedTransitions
+      });
+
+      await state.populate('allowedTransitions', 'name color');
+
+      sendResponse(res, 201, true, 'Estado creado exitosamente', { state });
+    } catch (error) {
+      console.error('Error creando estado:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Actualizar estado
+  async updateState(req, res) {
+    try {
+      const { id } = req.params;
+      const updateData = req.body;
+
+      const state = await State.findById(id);
+      if (!state || !state.isActive) {
+        return sendError(res, 404, 'Estado no encontrado');
+      }
+
+      // Si se está marcando como inicial, verificar que no haya otro
+      if (updateData.isInitial && !state.isInitial) {
+        const existingInitial = await State.findOne({
+          type: state.type,
+          isInitial: true,
+          isActive: true,
+          _id: { $ne: id }
+        });
+
+        if (existingInitial) {
+          return sendError(res, 400, `Ya existe un estado inicial para ${state.type}`);
+        }
+      }
+
+      const updatedState = await State.findByIdAndUpdate(
+        id,
+        updateData,
+        { new: true, runValidators: true }
+      ).populate('allowedTransitions', 'name color');
+
+      sendResponse(res, 200, true, 'Estado actualizado exitosamente', { 
+        state: updatedState 
+      });
+    } catch (error) {
+      console.error('Error actualizando estado:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Validar transición de estado
+  async validateTransition(req, res) {
+    try {
+      const { fromStateId, toStateId } = req.body;
+
+      const fromState = await State.findById(fromStateId).populate('allowedTransitions');
+      if (!fromState) {
+        return sendError(res, 404, 'Estado origen no encontrado');
+      }
+
+      const isValidTransition = fromState.allowedTransitions.some(
+        transition => transition._id.toString() === toStateId
+      );
+
+      sendResponse(res, 200, true, 'Validación completada', { 
+        isValid: isValidTransition 
+      });
+    } catch (error) {
+      console.error('Error validando transición:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+}
+
+module.exports = new StateController();
+
+// ========================================
+// src/controllers/upload.controller.js - Controlador de Upload
+// ========================================
+const path = require('path');
+const fs = require('fs').promises;
+const { sendResponse, sendError } = require('../utils/response.util');
+
+class UploadController {
+  // Subir avatar
+  async uploadAvatar(req, res) {
+    try {
+      if (!req.file) {
+        return sendError(res, 400, 'No se ha subido ningún archivo');
+      }
+
+      const { filename, mimetype, size } = req.file;
+      const fileUrl = `/uploads/avatars/${filename}`;
+
+      // Actualizar avatar del usuario
+      const User = require('../models/User.model');
+      await User.findByIdAndUpdate(req.user._id, { avatar: fileUrl });
+
+      sendResponse(res, 200, true, 'Avatar subido exitosamente', {
+        file: {
+          filename,
+          url: fileUrl,
+          mimetype,
+          size
+        }
+      });
+    } catch (error) {
+      console.error('Error subiendo avatar:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Subir documento
+  async uploadDocument(req, res) {
+    try {
+      if (!req.file) {
+        return sendError(res, 400, 'No se ha subido ningún archivo');
+      }
+
+      const { filename, originalname, mimetype, size } = req.file;
+      const fileUrl = `/uploads/documents/${filename}`;
+
+      sendResponse(res, 200, true, 'Documento subido exitosamente', {
+        file: {
+          filename,
+          originalname,
+          url: fileUrl,
+          mimetype,
+          size
+        }
+      });
+    } catch (error) {
+      console.error('Error subiendo documento:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Eliminar archivo
+  async deleteFile(req, res) {
+    try {
+      const { filename } = req.params;
+      const { type } = req.query; // 'avatar' o 'document'
+
+      const uploadPath = type === 'avatar' ? 'avatars' : 'documents';
+      const filePath = path.join(__dirname, '../../uploads', uploadPath, filename);
+
+      try {
+        await fs.access(filePath);
+        await fs.unlink(filePath);
+        
+        sendResponse(res, 200, true, 'Archivo eliminado exitosamente');
+      } catch (fileError) {
+        return sendError(res, 404, 'Archivo no encontrado');
+      }
+    } catch (error) {
+      console.error('Error eliminando archivo:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Obtener archivo
+  async getFile(req, res) {
+    try {
+      const { filename } = req.params;
+      const { type } = req.query;
+
+      const uploadPath = type === 'avatar' ? 'avatars' : 'documents';
+      const filePath = path.join(__dirname, '../../uploads', uploadPath, filename);
+
+      try {
+        await fs.access(filePath);
+        res.sendFile(filePath);
+      } catch (fileError) {
+        return sendError(res, 404, 'Archivo no encontrado');
+      }
+    } catch (error) {
+      console.error('Error obteniendo archivo:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+}
+
+module.exports = new UploadController();
+
+// ========================================
+// src/middlewares/upload.middleware.js - Middleware de Upload
+// ========================================
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+const { sendError } = require('../utils/response.util');
+
+// Crear directorios si no existen
+const createUploadDirs = () => {
+  const dirs = ['uploads/avatars', 'uploads/documents'];
+  dirs.forEach(dir => {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+  });
+};
+
+createUploadDirs();
+
+// Configuración de almacenamiento
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    let uploadPath = 'uploads/documents'; // default
+    
+    if (req.route.path.includes('avatar')) {
+      uploadPath = 'uploads/avatars';
+    }
+    
+    cb(null, uploadPath);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const extension = path.extname(file.originalname);
+    cb(null, file.fieldname + '-' + uniqueSuffix + extension);
+  }
+});
+
+// Filtro de archivos
+const fileFilter = (req, file, cb) => {
+  const allowedTypes = process.env.ALLOWED_FILE_TYPES?.split(',') || [
+    'image/jpeg',
+    'image/png', 
+    'image/gif',
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  ];
+
+  if (allowedTypes.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Tipo de archivo no permitido'), false);
+  }
+};
+
+// Configuración de multer
+const upload = multer({
+  storage,
+  fileFilter,
+  limits: {
+    fileSize: parseInt(process.env.MAX_FILE_SIZE) || 5 * 1024 * 1024 // 5MB default
+  }
+});
+
+// Middleware de manejo de errores de multer
+const handleMulterError = (error, req, res, next) => {
+  if (error instanceof multer.MulterError) {
+    if (error.code === 'LIMIT_FILE_SIZE') {
+      return sendError(res, 400, 'El archivo es demasiado grande');
+    }
+    if (error.code === 'LIMIT_FILE_COUNT') {
+      return sendError(res, 400, 'Demasiados archivos');
+    }
+    return sendError(res, 400, `Error de upload: ${error.message}`);
+  }
+  
+  if (error && error.message === 'Tipo de archivo no permitido') {
+    return sendError(res, 400, 'Tipo de archivo no permitido');
+  }
+  
+  next(error);
+};
+
+module.exports = {
+  uploadSingle: upload.single('file'),
+  uploadAvatar: upload.single('avatar'),
+  uploadDocument: upload.single('document'),
+  handleMulterError
+};
+
+// ========================================
+// src/routes/category.routes.js - Rutas de Categorías  
+// ========================================
+const express = require('express');
+const router = express.Router();
+const categoryController = require('../controllers/category.controller');
+const { authenticate } = require('../middlewares/auth.middleware');
+const { authorize } = require('../middlewares/role.middleware');
+const { validateCategory } = require('../validators/category.validator');
+const { validateRequest } = require('../middlewares/validation.middleware');
+
+// Todas las rutas requieren autenticación
+router.use(authenticate);
+
+// Rutas de categorías
+router.get('/', categoryController.getCategories);
+router.post('/', authorize(['Admin', 'Project Manager']), validateCategory, validateRequest, categoryController.createCategory);
+router.put('/:id', authorize(['Admin', 'Project Manager']), validateCategory, validateRequest, categoryController.updateCategory);
+router.delete('/:id', authorize(['Admin']), categoryController.deleteCategory);
+
+module.exports = router;
+
+// ========================================
+// src/routes/state.routes.js - Rutas de Estados
+// ========================================
+const express = require('express');
+const router = express.Router();
+const stateController = require('../controllers/state.controller');
+const { authenticate } = require('../middlewares/auth.middleware');
+const { authorize } = require('../middlewares/role.middleware');
+const { validateState } = require('../validators/state.validator');
+const { validateRequest } = require('../middlewares/validation.middleware');
+
+// Todas las rutas requieren autenticación
+router.use(authenticate);
+
+// Rutas de estados
+router.get('/:type', stateController.getStatesByType); // /projects o /tasks
+router.post('/', authorize(['Admin']), validateState, validateRequest, stateController.createState);
+router.put('/:id', authorize(['Admin']), validateState, validateRequest, stateController.updateState);
+router.post('/validate-transition', stateController.validateTransition);
+
+module.exports = router;
+
+// ========================================
+// src/routes/upload.routes.js - Rutas de Upload
+// ========================================
+const express = require('express');
+const router = express.Router();
+const uploadController = require('../controllers/upload.controller');
+const { authenticate } = require('../middlewares/auth.middleware');
+const { uploadAvatar, uploadDocument, handleMulterError } = require('../middlewares/upload.middleware');
+
+// Todas las rutas requieren autenticación
+router.use(authenticate);
+
+// Rutas de upload
+router.post('/avatar', uploadAvatar, uploadController.uploadAvatar);
+router.post('/document', uploadDocument, uploadController.uploadDocument);
+router.delete('/:filename', uploadController.deleteFile);
+router.get('/:filename', uploadController.getFile);
+
+// Middleware de manejo de errores de multer
+router.use(handleMulterError);
+
+module.exports = router;
+
+// ========================================
+// src/utils/response.util.js - Utilidades de Respuesta
+// ========================================
+/**
+ * Envía una respuesta exitosa estandarizada
+ * @param {Object} res - Objeto response de Express
+ * @param {number} statusCode - Código de estado HTTP
+ * @param {boolean} success - Indica si la operación fue exitosa
+ * @param {string} message - Mensaje descriptivo
+ * @param {Object|null} data - Datos a retornar
+ * @param {Object|null} pagination - Información de paginación
+ */
+const sendResponse = (res, statusCode, success, message, data = null, pagination = null) => {
+  const response = {
+    success,
+    message,
+    timestamp: new Date().toISOString()
+  };
+
+  if (data !== null) {
+    response.data = data;
+  }
+
+  if (pagination !== null) {
+    response.pagination = pagination;
+  }
+
+  return res.status(statusCode).json(response);
+};
+
+/**
+ * Envía una respuesta de error estandarizada
+ * @param {Object} res - Objeto response de Express
+ * @param {number} statusCode - Código de estado HTTP
+ * @param {string} message - Mensaje de error
+ * @param {Array|Object|null} errors - Detalles específicos del error
+ */
+const sendError = (res, statusCode, message, errors = null) => {
+  const response = {
+    success: false,
+    message,
+    timestamp: new Date().toISOString()
+  };
+
+  if (errors !== null) {
+    response.errors = errors;
+  }
+
+  return res.status(statusCode).json(response);
+};
+
+/**
+ * Crea objeto de paginación
+ * @param {number} page - Página actual
+ * @param {number} limit - Elementos por página
+ * @param {number} total - Total de elementos
+ */
+const createPagination = (page, limit, total) => {
+  return {
+    currentPage: page,
+    totalPages: Math.ceil(total / limit),
+    totalItems: total,
+    itemsPerPage: limit,
+    hasNextPage: page < Math.ceil(total / limit),
+    hasPrevPage: page > 1
+  };
+};
+
+module.exports = {
+  sendResponse,
+  sendError,
+  createPagination
+};
+
+// ========================================
+// src/middlewares/validation.middleware.js - Middleware de Validación
+// ========================================
+const { validationResult } = require('express-validator');
+const { sendError } = require('../utils/response.util');
+
+/**
+ * Middleware para validar requests usando express-validator
+ */
+const validateRequest = (req, res, next) => {
+  const errors = validationResult(req);
+  
+  if (!errors.isEmpty()) {
+    const formattedErrors = errors.array().map(error => ({
+      field: error.path || error.param,
+      message: error.msg,
+      value: error.value
+    }));
+
+    return sendError(res, 400, 'Errores de validación', formattedErrors);
+  }
+  
+  next();
+};
+
+/**
+ * Middleware personalizado para validaciones adicionales
+ */
+const customValidation = (validationFn) => {
+  return async (req, res, next) => {
+    try {
+      const isValid = await validationFn(req);
+      if (!isValid) {
+        return sendError(res, 400, 'Validación personalizada falló');
+      }
+      next();
+    } catch (error) {
+      console.error('Error en validación personalizada:', error);
+      return sendError(res, 500, 'Error en validación');
+    }
+  };
+};
+
+module.exports = {
+  validateRequest,
+  customValidation
+};
+
+// ========================================
+// src/middlewares/error.middleware.js - Middleware de Manejo de Errores
+// ========================================
+const { sendError } = require('../utils/response.util');
+
+/**
+ * Middleware global de manejo de errores
+ */
+const errorHandler = (err, req, res, next) => {
+  console.error('Error capturado:', err);
+
+  // Error de validación de Mongoose
+  if (err.name === 'ValidationError') {
+    const errors = Object.values(err.errors).map(error => ({
+      field: error.path,
+      message: error.message,
+      value: error.value
+    }));
+    
+    return sendError(res, 400, 'Errores de validación', errors);
+  }
+
+  // Error de duplicado de MongoDB
+  if (err.code === 11000) {
+    const field = Object.keys(err.keyValue)[0];
+    const message = `${field} ya existe`;
+    return sendError(res, 400, message);
+  }
+
+  // Error de casting de Mongoose (ID inválido)
+  if (err.name === 'CastError') {
+    return sendError(res, 400, 'ID inválido');
+  }
+
+  // Error de JWT
+  if (err.name === 'JsonWebTokenError') {
+    return sendError(res, 401, 'Token inválido');
+  }
+
+  if (err.name === 'TokenExpiredError') {
+    return sendError(res, 401, 'Token expirado');
+  }
+
+  // Error por defecto
+  const statusCode = err.statusCode || 500;
+  const message = err.message || 'Error interno del servidor';
+  
+  sendError(res, statusCode, message);
+};
+
+/**
+ * Middleware para rutas no encontradas
+ */
+const notFound = (req, res) => {
+  sendError(res, 404, `Ruta ${req.originalUrl} no encontrada`);
+};
+
+module.exports = {
+  errorHandler,
+  notFound
+};
+
+// ========================================
+// src/validators/category.validator.js - Validaciones de Categorías
+// ========================================
+const { body } = require('express-validator');
+
+const validateCategory = [
+  body('name')
+    .trim()
+    .isLength({ min: 1, max: 50 })
+    .withMessage('El nombre debe tener entre 1 y 50 caracteres')
+    .matches(/^[a-zA-ZÀ-ÿ\u00f1\u00d1\s]+$/)
+    .withMessage('El nombre solo puede contener letras y espacios'),
+
+  body('description')
+    .trim()
+    .isLength({ min: 1, max: 200 })
+    .withMessage('La descripción debe tener entre 1 y 200 caracteres'),
+
+  body('color')
+    .optional()
+    .matches(/^#[0-9A-F]{6}$/i)
+    .withMessage('El color debe ser un código hexadecimal válido (#RRGGBB)'),
+
+  body('icon')
+    .optional()
+    .trim()
+    .isLength({ min: 1, max: 20 })
+    .withMessage('El icono debe tener entre 1 y 20 caracteres')
+];
+
+module.exports = {
+  validateCategory
+};
+
+// ========================================
+// src/validators/state.validator.js - Validaciones de Estados
+// ========================================
+const { body } = require('express-validator');
+
+const validateState = [
+  body('name')
+    .trim()
+    .isLength({ min: 1, max: 50 })
+    .withMessage('El nombre debe tener entre 1 y 50 caracteres'),
+
+  body('description')
+    .optional()
+    .trim()
+    .isLength({ max: 200 })
+    .withMessage('La descripción no puede exceder 200 caracteres'),
+
+  body('type')
+    .isIn(['Project', 'Task'])
+    .withMessage('El tipo debe ser Project o Task'),
+
+  body('color')
+    .optional()
+    .matches(/^#[0-9A-F]{6}$/i)
+    .withMessage('El color debe ser un código hexadecimal válido'),
+
+  body('order')
+    .optional()
+    .isInt({ min: 0 })
+    .withMessage('El orden debe ser un número entero positivo'),
+
+  body('isInitial')
+    .optional()
+    .isBoolean()
+    .withMessage('isInitial debe ser un booleano'),
+
+  body('isFinal')
+    .optional()
+    .isBoolean()
+    .withMessage('isFinal debe ser un booleano'),
+
+  body('allowedTransitions')
+    .optional()
+    .isArray()
+    .withMessage('allowedTransitions debe ser un array')
+];
+
+module.exports = {
+  validateState
+};
+
+// ========================================
+// src/utils/constants.js - Constantes del Sistema
+// ========================================
+// Estados por defecto del sistema
+const DEFAULT_PROJECT_STATES = [
+  { name: 'Planificación', color: '#ffc107', order: 1, isInitial: true },
+  { name: 'En Progreso', color: '#007bff', order: 2 },
+  { name: 'En Revisión', color: '#fd7e14', order: 3 },
+  { name: 'Completado', color: '#28a745', order: 4, isFinal: true },
+  { name: 'Cancelado', color: '#dc3545', order: 5, isFinal: true }
+];
+
+const DEFAULT_TASK_STATES = [
+  { name: 'Pendiente', color: '#6c757d', order: 1, isInitial: true },
+  { name: 'En Progreso', color: '#007bff', order: 2 },
+  { name: 'En Revisión', color: '#fd7e14', order: 3 },
+  { name: 'Completada', color: '#28a745', order: 4, isFinal: true },
+  { name: 'Bloqueada', color: '#dc3545', order: 5 }
+];
+
+// Categorías por defecto
+const DEFAULT_CATEGORIES = [
+  { name: 'Desarrollo Web', description: 'Proyectos de desarrollo web', color: '#007bff', icon: 'code' },
+  { name: 'Mobile', description: 'Aplicaciones móviles', color: '#28a745', icon: 'smartphone' },
+  { name: 'DevOps', description: 'Infraestructura y despliegue', color: '#fd7e14', icon: 'server' },
+  { name: 'Diseño', description: 'Diseño UI/UX', color: '#e83e8c', icon: 'palette' },
+  { name: 'Testing', description: 'Pruebas y QA', color: '#6f42c1', icon: 'check-circle' }
+];
+
+// Roles y permisos
+const ROLES = {
+  ADMIN: 'Admin',
+  PROJECT_MANAGER: 'Project Manager', 
+  DEVELOPER: 'Developer',
+  VIEWER: 'Viewer'
+};
+
+const PERMISSIONS = {
+  CREATE: 'create',
+  READ: 'read',
+  UPDATE: 'update',
+  DELETE: 'delete',
+  MANAGE: 'manage'
+};
+
+// Límites del sistema
+const LIMITS = {
+  MAX_FILE_SIZE: 5 * 1024 * 1024, // 5MB
+  MAX_FILES_PER_PROJECT: 50,
+  MAX_MEMBERS_PER_PROJECT: 100,
+  MAX_TASKS_PER_PROJECT: 1000,
+  PAGINATION_DEFAULT_LIMIT: 10,
+  PAGINATION_MAX_LIMIT: 100
+};
+
+// Tipos de archivos permitidos
+const ALLOWED_FILE_TYPES = {
+  IMAGES: ['image/jpeg', 'image/png', 'image/gif'],
+  DOCUMENTS: [
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'text/plain'
+  ]
+};
+
+module.exports = {
+  DEFAULT_PROJECT_STATES,
+  DEFAULT_TASK_STATES,
+  DEFAULT_CATEGORIES,
+  ROLES,
+  PERMISSIONS,
+  LIMITS,
+  ALLOWED_FILE_TYPES
+};
+
+// ========================================
+// tests/categories.test.js - Tests de Categorías
+// ========================================
+const request = require('supertest');
+const app = require('../server');
+const Category = require('../src/models/Category.model');
+const User = require('../src/models/User.model');
+const Role = require('../src/models/Role.model');
+
+describe('Category Endpoints', () => {
+  let authToken;
+  let testUser;
+  let adminRole;
+
+  beforeAll(async () => {
+    // Crear rol admin
+    adminRole = await Role.create({
+      name: 'Admin',
+      description: 'Administrador del sistema',
+      permissions: []
+    });
+
+    // Crear usuario de prueba
+    testUser = await User.create({
+      firstName: 'Test',
+      lastName: 'Admin',
+      email: 'admin@test.com',
+      password: 'password123',
+      globalRole: adminRole._id,
+      isEmailVerified: true
+    });
+
+    // Obtener token
+    const loginResponse = await request(app)
+      .post('/api/auth/login')
+      .send({
+        email: 'admin@test.com',
+        password: 'password123'
+      });
+
+    authToken = loginResponse.body.data.tokens.accessToken;
+  });
+
+  beforeEach(async () => {
+    await Category.deleteMany({});
+  });
+
+  describe('GET /api/categories', () => {
+    test('Should get all categories', async () => {
+      // Crear categoría de prueba
+      await Category.create({
+        name: 'Test Category',
+        description: 'Test Description',
+        createdBy: testUser._id
+      });
+
+      const response = await request(app)
+        .get('/api/categories')
+        .set('Authorization', `Bearer ${authToken}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.categories).toHaveLength(1);
+    });
+  });
+
+  describe('POST /api/categories', () => {
+    test('Should create a new category', async () => {
+      const categoryData = {
+        name: 'New Category',
+        description: 'New Description',
+        color: '#007bff'
+      };
+
+      const response = await request(app)
+        .post('/api/categories')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send(categoryData);
+
+      expect(response.status).toBe(201);
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.category.name).toBe(categoryData.name);
+    });
+
+    test('Should not create category with duplicate name', async () => {
+      // Crear categoría existente
+      await Category.create({
+        name: 'Existing Category',
+        description: 'Existing Description',
+        createdBy: testUser._id
+      });
+
+      const response = await request(app)
+        .post('/api/categories')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          name: 'Existing Category',
+          description: 'Another Description'
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body.success).toBe(false);
+    });
+  });
+});
+
+// ========================================
+// Configuración de inicialización para Franklin
+// ========================================
+// scripts/init-states.js - Script para crear estados por defecto
+const mongoose = require('mongoose');
+const State = require('../src/models/State.model');
+const { DEFAULT_PROJECT_STATES, DEFAULT_TASK_STATES } = require('../src/utils/constants');
+require('dotenv').config();
+
+const initializeStates = async () => {
+  try {
+    await mongoose.connect(process.env.MONGODB_URI);
+    console.log('Conectado a MongoDB');
+
+    // Crear estados de proyecto por defecto
+    for (const stateData of DEFAULT_PROJECT_STATES) {
+      const existingState = await State.findOne({ 
+        name: stateData.name, 
+        type: 'Project' 
+      });
+
+      if (!existingState) {
+        await State.create({
+          ...stateData,
+          type: 'Project',
+          description: `Estado ${stateData.name} para proyectos`
+        });
+        console.log(`✅ Estado de proyecto creado: ${stateData.name}`);
+      }
+    }
+
+    // Crear estados de tarea por defecto
+    for (const stateData of DEFAULT_TASK_STATES) {
+      const existingState = await State.findOne({ 
+        name: stateData.name, 
+        type: 'Task' 
+      });
+
+      if (!existingState) {
+        await State.create({
+          ...stateData,
+          type: 'Task',
+          description: `Estado ${stateData.name} para tareas`
+        });
+        console.log(`✅ Estado de tarea creado: ${stateData.name}`);
+      }
+    }
+
+    console.log('🎉 Estados inicializados correctamente');
+    process.exit(0);
+  } catch (error) {
+    console.error('❌ Error inicializando estados:', error);
+    process.exit(1);
+  }
+};
+
+if (require.main === module) {
+  initializeStates();
+}
+
+module.exports = initializeStates;
