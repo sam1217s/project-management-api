@@ -1,6 +1,6 @@
-# 📁 Estructura Completa del Proyecto
+# 📁 Estructura Completa de Archivos - Mariam Pizza
 
-## 🗂️ Árbol de Directorios Completo
+## 🗂️ Vista General del Proyecto
 
 ```
 project-management-api/
@@ -18,9 +18,9 @@ project-management-api/
 │   │   ├── state.controller.js            # 👨‍💻 Franklin
 │   │   ├── upload.controller.js           # 👨‍💻 Franklin
 │   │   ├── project.controller.js          # 👩‍💻 Mariana
-│   │   ├── task.controller.js             # 👩‍💻 Mariam
-│   │   ├── comment.controller.js          # 👩‍💻 Mariam
-│   │   └── ai.controller.js               # 👩‍💻 Mariam
+│   │   ├── task.controller.js             # 👩‍💻 Mariam ⭐
+│   │   ├── comment.controller.js          # 👩‍💻 Mariam ⭐
+│   │   └── ai.controller.js               # 👩‍💻 Mariam ⭐
 │   │
 │   ├── 📁 middlewares/
 │   │   ├── auth.middleware.js             # 👨‍💻 Samuel
@@ -35,8 +35,8 @@ project-management-api/
 │   │   ├── Category.model.js              # 👨‍💻 Franklin
 │   │   ├── State.model.js                 # 👨‍💻 Franklin
 │   │   ├── Project.model.js               # 👩‍💻 Mariana
-│   │   ├── Task.model.js                  # 👩‍💻 Mariam
-│   │   └── Comment.model.js               # 👩‍💻 Mariam
+│   │   ├── Task.model.js                  # 👩‍💻 Mariam ⭐
+│   │   └── Comment.model.js               # 👩‍💻 Mariam ⭐
 │   │
 │   ├── 📁 routes/
 │   │   ├── auth.routes.js                 # 👨‍💻 Samuel
@@ -46,15 +46,15 @@ project-management-api/
 │   │   ├── state.routes.js                # 👨‍💻 Franklin
 │   │   ├── upload.routes.js               # 👨‍💻 Franklin
 │   │   ├── project.routes.js              # 👩‍💻 Mariana
-│   │   ├── task.routes.js                 # 👩‍💻 Mariam
-│   │   ├── comment.routes.js              # 👩‍💻 Mariam
-│   │   └── ai.routes.js                   # 👩‍💻 Mariam
+│   │   ├── task.routes.js                 # 👩‍💻 Mariam ⭐
+│   │   ├── comment.routes.js              # 👩‍💻 Mariam ⭐
+│   │   └── ai.routes.js                   # 👩‍💻 Mariam ⭐
 │   │
 │   ├── 📁 services/
 │   │   ├── auth.service.js                # 👨‍💻 Samuel
 │   │   ├── email.service.js               # 👨‍💻 Samuel
 │   │   ├── upload.service.js              # 👨‍💻 Franklin
-│   │   └── ai.service.js                  # 👩‍💻 Mariam
+│   │   └── ai.service.js                  # 👩‍💻 Mariam ⭐ (Opcional)
 │   │
 │   ├── 📁 utils/
 │   │   ├── response.util.js               # 👨‍💻 Franklin
@@ -69,9 +69,9 @@ project-management-api/
 │   │   ├── category.validator.js          # 👨‍💻 Franklin
 │   │   ├── state.validator.js             # 👨‍💻 Franklin
 │   │   ├── project.validator.js           # 👩‍💻 Mariana
-│   │   ├── task.validator.js              # 👩‍💻 Mariam
-│   │   ├── comment.validator.js           # 👩‍💻 Mariam
-│   │   └── ai.validator.js                # 👩‍💻 Mariam
+│   │   ├── task.validator.js              # 👩‍💻 Mariam ⭐
+│   │   ├── comment.validator.js           # 👩‍💻 Mariam ⭐
+│   │   └── ai.validator.js                # 👩‍💻 Mariam ⭐
 │   │
 │   └── app.js                             # 👨‍💻 Samuel
 │
@@ -85,62 +85,245 @@ project-management-api/
 │   ├── categories.test.js                 # 👨‍💻 Franklin
 │   ├── states.test.js                     # 👨‍💻 Franklin
 │   ├── projects.test.js                   # 👩‍💻 Mariana
-│   ├── tasks.test.js                      # 👩‍💻 Mariam
-│   ├── comments.test.js                   # 👩‍💻 Mariam
-│   └── ai.test.js                         # 👩‍💻 Mariam
+│   ├── tasks.test.js                      # 👩‍💻 Mariam ⭐
+│   ├── comments.test.js                   # 👩‍💻 Mariam ⭐
+│   └── ai.test.js                         # 👩‍💻 Mariam ⭐
 │
 ├── 📁 scripts/
 │   ├── init-default-data.js               # 👨‍💻 Franklin
 │   ├── seed-users.js                      # 👨‍💻 Samuel
 │   ├── seed-projects.js                   # 👩‍💻 Mariana
-│   └── seed-tasks.js                      # 👩‍💻 Mariam
+│   ├── seed-tasks.js                      # 👩‍💻 Mariam ⭐
+│   └── test-deepseek.js                   # 👩‍💻 Mariam ⭐
 │
 ├── 📁 docs/
 │   ├── api.md                             # 👥 Todos
 │   ├── setup.md                           # 👨‍💻 Samuel
+│   ├── ai-endpoints.md                    # 👩‍💻 Mariam ⭐
 │   └── deployment.md                      # 👥 Todos
 │
 ├── server.js                              # 👨‍💻 Samuel
-├── package.json                           # 👨‍💻 Samuel
-├── .env.example                           # 👨‍💻 Samuel
+├── package.json                           # 👨‍💻 Samuel + Mariam (actualizar)
+├── .env.example                           # 👨‍💻 Samuel + Mariam (actualizar)
 ├── .gitignore                             # 👨‍💻 Samuel
 ├── README.md                              # 👥 Todos
 ├── jest.config.js                         # 👨‍💻 Samuel
 └── nodemon.json                           # 👨‍💻 Samuel
 ```
 
+---
+
+## 🎯 Archivos Específicos de Mariam (11 archivos principales)
+
+### 📂 **MODELOS (2 archivos)**
+```
+src/models/
+├── Task.model.js                 ⭐ CRÍTICO
+└── Comment.model.js              ⭐ CRÍTICO
+```
+
+### 📂 **CONTROLADORES (3 archivos)**
+```
+src/controllers/
+├── task.controller.js            ⭐ PRINCIPAL
+├── comment.controller.js         ⭐ PRINCIPAL  
+└── ai.controller.js              ⭐ INNOVADOR (DeepSeek)
+```
+
+### 📂 **RUTAS (3 archivos)**
+```
+src/routes/
+├── task.routes.js                ⭐ 8 endpoints
+├── comment.routes.js             ⭐ 4 endpoints
+└── ai.routes.js                  ⭐ 5 endpoints IA
+```
+
+### 📂 **VALIDADORES (3 archivos)**
+```
+src/validators/
+├── task.validator.js             ⭐ Validaciones tareas
+├── comment.validator.js          ⭐ Validaciones comentarios
+└── ai.validator.js               ⭐ Validaciones IA
+```
+
+---
+
+## 📋 Lista de Tareas por Prioridad
+
+### 🔴 **PRIORIDAD CRÍTICA** (Día 1-2)
+```
+✅ src/models/Task.model.js
+✅ src/models/Comment.model.js
+✅ src/controllers/task.controller.js (métodos básicos)
+```
+
+### 🟡 **PRIORIDAD ALTA** (Día 3-4)
+```
+✅ src/controllers/comment.controller.js
+✅ src/routes/task.routes.js
+✅ src/routes/comment.routes.js
+✅ src/validators/task.validator.js
+✅ src/validators/comment.validator.js
+```
+
+### 🟢 **PRIORIDAD NORMAL** (Día 4-5)
+```
+✅ src/controllers/ai.controller.js (con DeepSeek)
+✅ src/routes/ai.routes.js
+✅ src/validators/ai.validator.js
+✅ scripts/test-deepseek.js
+```
+
+### 🔵 **OPCIONALES** (Tiempo extra)
+```
+✅ tests/tasks.test.js
+✅ tests/comments.test.js
+✅ tests/ai.test.js
+✅ docs/ai-endpoints.md
+✅ scripts/seed-tasks.js
+```
+
+---
+
+## 🛠️ Comandos de Setup para Mariam
+
+### **Paso 1: Instalar dependencias**
+```bash
+npm install axios
+```
+
+### **Paso 2: Crear estructura de carpetas**
+```bash
+# Las carpetas ya existen, solo crear archivos
+touch src/models/Task.model.js
+touch src/models/Comment.model.js
+touch src/controllers/task.controller.js
+touch src/controllers/comment.controller.js
+touch src/controllers/ai.controller.js
+touch src/routes/task.routes.js
+touch src/routes/comment.routes.js
+touch src/routes/ai.routes.js
+touch src/validators/task.validator.js
+touch src/validators/comment.validator.js
+touch src/validators/ai.validator.js
+touch scripts/test-deepseek.js
+```
+
+### **Paso 3: Configurar DeepSeek**
+```bash
+# Ir a https://platform.deepseek.com/api_keys
+# Obtener API key gratis
+echo "DEEPSEEK_API_KEY=sk-your-key-here" >> .env
+```
+
+### **Paso 4: Actualizar server.js**
+```javascript
+// Agregar estas líneas en server.js:
+app.use('/api/tasks', require('./src/routes/task.routes'));
+app.use('/api/comments', require('./src/routes/comment.routes'));
+app.use('/api/ai', require('./src/routes/ai.routes'));
+```
+
+### **Paso 5: Probar configuración**
+```bash
+npm run test-deepseek
+```
+
+---
+
 ## 📊 Resumen por Desarrollador
 
-| Desarrollador | Archivos | Módulos | Responsabilidad |
-|---------------|----------|---------|-----------------|
-| **👨‍💻 Samuel** | 15 archivos | Auth, Users, Roles | Setup + Autenticación |
-| **👨‍💻 Franklin** | 12 archivos | Categories, States, Upload | Infraestructura base |
-| **👩‍💻 Mariana** | 5 archivos | Projects | Gestión de proyectos |
-| **👩‍💻 Mariam** | 10 archivos | Tasks, Comments, AI | Funcionalidades avanzadas |
+### 👩‍💻 **Mariam Pizza - Responsabilidades:**
 
-## 🔗 Dependencias entre Módulos
+| Módulo | Archivos | Líneas aprox. | Complejidad |
+|--------|----------|---------------|-------------|
+| **Modelos** | 2 archivos | 200 líneas | 🟡 Media |
+| **Controladores** | 3 archivos | 800 líneas | 🔴 Alta |
+| **Rutas** | 3 archivos | 150 líneas | 🟢 Baja |
+| **Validadores** | 3 archivos | 200 líneas | 🟢 Baja |
+| **Scripts** | 1 archivo | 50 líneas | 🟢 Baja |
+| **TOTAL** | **12 archivos** | **1400 líneas** | 🟡 **Media** |
 
+### 🔗 **Dependencias de otros desarrolladores:**
+
+#### **Requiere de Samuel:**
+- ✅ `User.model.js` - Para referencias de usuario
+- ✅ `auth.middleware.js` - Para autenticación
+- ✅ `response.util.js` - Para respuestas estandarizadas
+
+#### **Requiere de Franklin:**
+- ✅ `State.model.js` - Para estados de tareas
+- ✅ `validation.middleware.js` - Para validaciones
+- ✅ `response.util.js` - Para respuestas
+
+#### **Requiere de Mariana:**
+- ✅ `Project.model.js` - Para relación con proyectos
+
+---
+
+## 🚀 Endpoints que Mariam implementará
+
+### **📋 TAREAS (8 endpoints)**
 ```
-Samuel (Base) 
-    ↓
-Franklin (Infraestructura)
-    ↓
-Mariana (Proyectos)
-    ↓
-Mariam (Tareas + IA)
+GET    /api/tasks/projects/:projectId/tasks     # Listar tareas del proyecto
+POST   /api/tasks/projects/:projectId/tasks     # Crear tarea
+GET    /api/tasks/my-tasks                      # Mis tareas asignadas
+GET    /api/tasks/:id                           # Ver tarea específica
+PUT    /api/tasks/:id                           # Actualizar tarea
+DELETE /api/tasks/:id                           # Eliminar tarea
+PUT    /api/tasks/:id/status                    # Cambiar estado
+PUT    /api/tasks/:id/assign                    # Asignar usuario
 ```
 
-## 📦 Archivos Compartidos
+### **💬 COMENTARIOS (4 endpoints)**
+```
+GET    /api/comments/projects/:id/comments      # Listar comentarios
+POST   /api/comments/projects/:id/comments      # Crear comentario
+PUT    /api/comments/:id                        # Editar comentario
+DELETE /api/comments/:id                        # Eliminar comentario
+```
 
-### Todos los desarrolladores usan:
-- `src/utils/response.util.js` (Franklin)
-- `src/middlewares/auth.middleware.js` (Samuel)
-- `src/middlewares/validation.middleware.js` (Franklin)
-- `.env` variables
-- `package.json` dependencias
+### **🤖 IA CON DEEPSEEK (5 endpoints)**
+```
+POST   /api/ai/generate-tasks                   # Generar tareas automáticamente
+POST   /api/ai/analyze-project                  # Analizar salud del proyecto
+POST   /api/ai/estimate-time                    # Estimar tiempo de tarea
+POST   /api/ai/generate-summary                 # Resumen ejecutivo
+POST   /api/ai/suggest-improvements             # Sugerir mejoras
+```
 
-### Configuración común:
-- MongoDB connection (Samuel)
-- JWT configuration (Samuel) 
-- Express setup (Samuel)
-- Error handling (Franklin)
+### **📊 TOTAL: 17 endpoints funcionales**
+
+---
+
+## 🎯 Cronograma Sugerido
+
+### **Semana 4 - Cronograma de Mariam:**
+
+| Día | Tareas | Archivos | Status |
+|-----|--------|----------|---------|
+| **Lunes** | Modelos + Task Controller básico | Task.model.js, Comment.model.js, task.controller.js (CRUD) | 🔴 Crítico |
+| **Martes** | Task Controller completo | task.controller.js (estados, asignación, mis tareas) | 🔴 Crítico |
+| **Miércoles** | Comment Controller + Rutas | comment.controller.js, task.routes.js, comment.routes.js | 🟡 Alto |
+| **Jueves** | Validadores + IA Controller | Todos los validators, ai.controller.js | 🟡 Alto |
+| **Viernes** | IA endpoints + Testing | ai.routes.js, test-deepseek.js, pruebas generales | 🟢 Normal |
+
+### **Resultado esperado:**
+✅ **17 endpoints funcionales**  
+✅ **IA con DeepSeek operativa**  
+✅ **Sistema completo de tareas y comentarios**  
+✅ **10M tokens gratis para el equipo**
+
+---
+
+## 🏆 ¡Estructura Lista para Implementar!
+
+Mariam tendrá **12 archivos principales** que implementarán **17 endpoints** con **IA gratuita incluida**. La estructura está diseñada para ser:
+
+- ✅ **Modular** - Cada funcionalidad separada
+- ✅ **Escalable** - Fácil agregar nuevas features  
+- ✅ **Mantenible** - Código limpio y organizado
+- ✅ **Robusta** - Manejo completo de errores
+- ✅ **Innovadora** - IA con DeepSeek gratuita
+
+🚀 **¡Lista para comenzar!**
