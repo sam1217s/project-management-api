@@ -1,0 +1,243 @@
+# 🎯 Prioridades y Orden de Trabajo
+
+## 🚦 Semáforo de Dependencias
+
+### 🔴 **CRÍTICO - No se puede avanzar sin esto**
+```
+👨‍💻 Samuel (Semana 1)
+├── server.js           ← Sin esto nadie puede probar
+├── package.json        ← Sin esto no hay dependencias
+├── User.model.js       ← Todos los modelos lo referencian
+├── auth.middleware.js  ← Todas las rutas lo necesitan
+└── .env.example        ← Sin esto no funciona la DB
+```
+
+### 🟡 **IMPORTANTE - Infraestructura base**
+```
+👨‍💻 Franklin (Semana 2)
+├── response.util.js         ← Todos los controllers lo usan
+├── validation.middleware.js ← Todas las rutas lo necesitan
+├── State.model.js          ← Project y Task lo referencian
+├── Category.model.js       ← Project lo referencia
+└── uploads/ folders        ← Para subir archivos
+```
+
+### 🟢 **NORMAL - Funcionalidades específicas**
+```
+👩‍💻 Mariana (Semana 3)
+└── Project.model.js    ← Task lo referencia
+
+👩‍💻 Mariam (Semana 4-5)
+├── Task.model.js       ← Independiente
+├── Comment.model.js    ← Independiente
+└── ai.controller.js    ← Independiente
+```
+
+---
+
+## 📅 Cronograma Detallado
+
+### **Semana 1: Samuel - Setup Crítico**
+| Día | Tareas | Archivos Clave |
+|-----|--------|----------------|
+| **Lunes** | Setup inicial | `server.js`, `package.json`, `.env.example` |
+| **Martes** | Modelos base | `User.model.js`, `Role.model.js` |
+| **Miércoles** | Autenticación | `auth.controller.js`, `auth.middleware.js` |
+| **Jueves** | Usuarios y roles | `user.controller.js`, `role.controller.js` |
+| **Viernes** | Tests y validación | `auth.test.js`, limpiar bugs |
+
+**🎯 Deliverable**: API base funcionando con login/register
+
+### **Semana 2: Franklin + Samuel**
+| Desarrollador | Tareas | Archivos Clave |
+|---------------|--------|----------------|
+| **👨‍💻 Franklin** | Infraestructura | `response.util.js`, `validation.middleware.js` |
+| **👨‍💻 Franklin** | Modelos base | `Category.model.js`, `State.model.js` |
+| **👨‍💻 Franklin** | Upload sistema | `upload.controller.js`, `upload.middleware.js` |
+| **👨‍💻 Samuel** | Completar auth | Email service, password reset |
+
+**🎯 Deliverable**: Infraestructura completa para otros módulos
+
+### **Semana 3: Mariana + Franklin**
+| Desarrollador | Tareas | Archivos Clave |
+|---------------|--------|----------------|
+| **👩‍💻 Mariana** | Modelo complejo | `Project.model.js` (con members array) |
+| **👩‍💻 Mariana** | CRUD proyectos | `project.controller.js` |
+| **👩‍💻 Mariana** | Sistema miembros | Add/remove members, permisos |
+| **👨‍💻 Franklin** | Scripts y docs | `init-default-data.js`, documentación |
+
+**🎯 Deliverable**: Gestión completa de proyectos
+
+### **Semana 4: Mariam + Mariana**  
+| Desarrollador | Tareas | Archivos Clave |
+|---------------|--------|----------------|
+| **👩‍💻 Mariam** | Modelos avanzados | `Task.model.js`, `Comment.model.js` |
+| **👩‍💻 Mariam** | CRUD tareas | `task.controller.js` |
+| **👩‍💻 Mariam** | Sistema comentarios | `comment.controller.js` |
+| **👩‍💻 Mariana** | Testing integración | Tests proyecto-tarea |
+
+**🎯 Deliverable**: Sistema completo sin IA
+
+### **Semana 5: Mariam + Todos**
+| Desarrollador | Tareas | Archivos Clave |
+|---------------|--------|----------------|
+| **👩‍💻 Mariam** | IA completa | `ai.controller.js`, OpenAI integration |
+| **👥 Todos** | Testing final | Integration tests, bug fixes |
+| **👥 Todos** | Documentación | API docs, README, deployment |
+
+**🎯 Deliverable**: Producto final con IA
+
+---
+
+## 🗂️ Estructura por Prioridad de Creación
+
+### 🥇 **PRIMERA PRIORIDAD - Samuel (Día 1)**
+```
+project-management-api/
+├── server.js                    # ⚡ URGENTE
+├── package.json                 # ⚡ URGENTE  
+├── .env.example                 # ⚡ URGENTE
+├── .gitignore                   # ⚡ URGENTE
+└── src/
+    ├── models/
+    │   └── User.model.js        # ⚡ URGENTE
+    ├── middlewares/
+    │   └── auth.middleware.js   # ⚡ URGENTE
+    └── utils/
+        └── response.util.js     # ⚡ URGENTE (Franklin puede hacer después)
+```
+
+### 🥈 **SEGUNDA PRIORIDAD - Samuel (Día 2-3)**
+```
+src/
+├── models/
+│   └── Role.model.js
+├── controllers/
+│   └── auth.controller.js
+├── routes/
+│   └── auth.routes.js
+└── validators/
+    └── auth.validator.js
+```
+
+### 🥉 **TERCERA PRIORIDAD - Franklin (Día 4-5)**
+```
+src/
+├── models/
+│   ├── Category.model.js
+│   └── State.model.js
+├── middlewares/
+│   ├── validation.middleware.js
+│   └── error.middleware.js
+└── utils/
+    ├── response.util.js         # Si Samuel no lo hizo
+    └── constants.js
+```
+
+---
+
+## 🚀 Comandos de Setup por Desarrollador
+
+### 👨‍💻 **Samuel - Primer Día**
+```bash
+# 1. Crear proyecto
+mkdir project-management-api
+cd project-management-api
+git init
+
+# 2. Setup inicial
+npm init -y
+npm install express mongoose bcryptjs jsonwebtoken express-validator cors helmet express-rate-limit dotenv
+npm install -D nodemon jest supertest
+
+# 3. Crear estructura
+mkdir -p src/{config,controllers,middlewares,models,routes,services,utils,validators}
+mkdir -p uploads/{avatars,documents}
+mkdir -p tests scripts docs
+
+# 4. Crear archivos base
+touch server.js .env.example .gitignore README.md
+```
+
+### 👨‍💻 **Franklin - Segundo Día**
+```bash
+# 1. Pull del repo de Samuel
+git pull origin develop
+
+# 2. Instalar multer
+npm install multer
+
+# 3. Crear carpetas upload
+mkdir -p uploads/{avatars,documents}
+
+# 4. Crear archivos base
+touch src/models/{Category,State}.model.js
+touch src/controllers/{category,state,upload}.controller.js
+```
+
+### 👩‍💻 **Mariana - Inicio Semana 3**
+```bash
+# 1. Pull de Franklin
+git pull origin develop
+
+# 2. Crear archivos
+touch src/models/Project.model.js
+touch src/controllers/project.controller.js
+touch src/routes/project.routes.js
+touch src/validators/project.validator.js
+```
+
+### 👩‍💻 **Mariam - Inicio Semana 4**
+```bash
+# 1. Pull de Mariana  
+git pull origin develop
+
+# 2. Instalar OpenAI
+npm install openai
+
+# 3. Crear archivos
+touch src/models/{Task,Comment}.model.js
+touch src/controllers/{task,comment,ai}.controller.js
+```
+
+---
+
+## 📊 Métricas de Progreso
+
+### Semana 1 - Samuel (100% crítico)
+- [ ] ✅ 5 archivos base creados
+- [ ] ✅ MongoDB conecta
+- [ ] ✅ POST /api/auth/register funciona
+- [ ] ✅ POST /api/auth/login funciona
+- [ ] ✅ Middleware auth protege rutas
+
+### Semana 2 - Franklin (80% crítico)
+- [ ] ✅ response.util.js funciona
+- [ ] ✅ validation.middleware.js funciona  
+- [ ] ✅ Category CRUD completo
+- [ ] ✅ State CRUD completo
+- [ ] ✅ Upload files funciona
+
+### Semana 3 - Mariana (60% crítico)
+- [ ] ✅ Project model con members
+- [ ] ✅ Project CRUD completo
+- [ ] ✅ Add/remove members funciona
+- [ ] ✅ Permisos por proyecto
+
+### Semana 4-5 - Mariam (40% crítico)
+- [ ] ✅ Task CRUD completo
+- [ ] ✅ Comment CRUD completo
+- [ ] ✅ IA genera tareas
+- [ ] ✅ IA analiza proyectos
+
+---
+
+## 🎯 **Regla de Oro**: 
+### No avanzar al siguiente nivel hasta que el anterior esté 100% funcional
+
+1. **Samuel debe completar auth antes que Franklin empiece**
+2. **Franklin debe completar utils antes que Mariana empiece**  
+3. **Mariana debe completar projects antes que Mariam empiece**
+4. **Todos deben probar integración antes del deploy**
+
+Esta estructura asegura que cada desarrollador tenga lo necesario para trabajar sin bloqueos.
