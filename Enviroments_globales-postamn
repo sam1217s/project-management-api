@@ -1,0 +1,211 @@
+{
+  "id": "project-management-env",
+  "name": "Project Management API - Development",
+  "values": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000/api",
+      "description": "URL base de la API en desarrollo",
+      "enabled": true
+    },
+    {
+      "key": "auth_token",
+      "value": "",
+      "description": "Token JWT de autenticación (se guarda automáticamente al hacer login)",
+      "enabled": true
+    },
+    {
+      "key": "user_id",
+      "value": "",
+      "description": "ID del usuario actual (se guarda automáticamente al hacer login)",
+      "enabled": true
+    },
+    {
+      "key": "role_id",
+      "value": "",
+      "description": "ID de rol por defecto (se obtiene automáticamente)",
+      "enabled": true
+    },
+    {
+      "key": "category_id",
+      "value": "",
+      "description": "ID de categoría principal (se obtiene automáticamente)",
+      "enabled": true
+    },
+    {
+      "key": "mobile_category_id",
+      "value": "",
+      "description": "ID de categoría mobile (se crea automáticamente)",
+      "enabled": true
+    },
+    {
+      "key": "devops_category_id",
+      "value": "",
+      "description": "ID de categoría DevOps (se crea automáticamente)",
+      "enabled": true
+    },
+    {
+      "key": "project_state_id",
+      "value": "",
+      "description": "ID de estado para proyectos (se obtiene automáticamente)",
+      "enabled": true
+    },
+    {
+      "key": "task_state_id",
+      "value": "",
+      "description": "ID de estado para tareas (se obtiene automáticamente)",
+      "enabled": true
+    },
+    {
+      "key": "project_id",
+      "value": "",
+      "description": "ID del proyecto principal para tests",
+      "enabled": true
+    },
+    {
+      "key": "new_project_id",
+      "value": "",
+      "description": "ID del nuevo proyecto creado (e-commerce)",
+      "enabled": true
+    },
+    {
+      "key": "mobile_project_id",
+      "value": "",
+      "description": "ID del proyecto mobile creado",
+      "enabled": true
+    },
+    {
+      "key": "devops_project_id",
+      "value": "",
+      "description": "ID del proyecto DevOps creado",
+      "enabled": true
+    },
+    {
+      "key": "task_id",
+      "value": "",
+      "description": "ID de tarea principal para tests",
+      "enabled": true
+    },
+    {
+      "key": "new_task_id",
+      "value": "",
+      "description": "ID de la nueva tarea creada",
+      "enabled": true
+    },
+    {
+      "key": "frontend_task_id",
+      "value": "",
+      "description": "ID de tarea frontend",
+      "enabled": true
+    },
+    {
+      "key": "backend_task_id",
+      "value": "",
+      "description": "ID de tarea backend",
+      "enabled": true
+    },
+    {
+      "key": "database_task_id",
+      "value": "",
+      "description": "ID de tarea de base de datos",
+      "enabled": true
+    },
+    {
+      "key": "comment_id",
+      "value": "",
+      "description": "ID de comentario para tests",
+      "enabled": true
+    },
+    {
+      "key": "new_comment_id",
+      "value": "",
+      "description": "ID del nuevo comentario creado",
+      "enabled": true
+    },
+    {
+      "key": "new_category_id",
+      "value": "",
+      "description": "ID de nueva categoría creada",
+      "enabled": true
+    },
+    {
+      "key": "new_role_id",
+      "value": "",
+      "description": "ID de nuevo rol creado",
+      "enabled": true
+    },
+    {
+      "key": "new_project_state_id",
+      "value": "",
+      "description": "ID de nuevo estado de proyecto",
+      "enabled": true
+    },
+    {
+      "key": "new_task_state_id",
+      "value": "",
+      "description": "ID de nuevo estado de tarea",
+      "enabled": true
+    },
+    {
+      "key": "avatar_url",
+      "value": "",
+      "description": "URL del avatar subido",
+      "enabled": true
+    },
+    {
+      "key": "document_url",
+      "value": "",
+      "description": "URL del documento subido",
+      "enabled": true
+    },
+    {
+      "key": "document_filename",
+      "value": "",
+      "description": "Nombre del archivo subido",
+      "enabled": true
+    },
+    {
+      "key": "user_to_add_id",
+      "value": "",
+      "description": "ID de usuario para agregar a proyectos (manual)",
+      "enabled": true
+    },
+    {
+      "key": "user_to_remove_id",
+      "value": "",
+      "description": "ID de usuario para remover de proyectos (manual)",
+      "enabled": true
+    },
+    {
+      "key": "user_id_to_delete",
+      "value": "",
+      "description": "ID de usuario para eliminar (manual)",
+      "enabled": true
+    },
+    {
+      "key": "task_to_delete_id",
+      "value": "",
+      "description": "ID de tarea para eliminar (manual)",
+      "enabled": true
+    },
+    {
+      "key": "comment_to_delete_id",
+      "value": "",
+      "description": "ID de comentario para eliminar (manual)",
+      "enabled": true
+    },
+    {
+      "key": "project_to_delete_id",
+      "value": "",
+      "description": "ID de proyecto para eliminar (manual)",
+      "enabled": true
+    },
+    {
+      "key": "ai_generated_tasks",
+      "value": "",
+      "description": "JSON con tareas generadas por IA",
+      "enabled": true
+    }
+  ],
+  "_postman_variable_scope": "environment"
+}
