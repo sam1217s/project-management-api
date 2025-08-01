@@ -1,0 +1,446 @@
+{
+  "info": {
+    "name": "Mariana Gomez - Projects",
+    "description": "Endpoints de gestión de proyectos y miembros",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{auth_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "{{base_url}}"
+    }
+  ],
+  "item": [
+    {
+      "name": "🚀 PROJECTS CRUD",
+      "item": [
+        {
+          "name": "Get My Projects",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    console.log('Mis proyectos:', response.data.pagination.total);",
+                  "    if (response.data.projects.length > 0) {",
+                  "        pm.environment.set('project_id', response.data.projects[0]._id);",
+                  "        console.log('Project ID guardado:', response.data.projects[0]._id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/projects?page=1&limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["projects"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Project",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    pm.environment.set('new_project_id', response.data.project._id);",
+                  "    console.log('Nuevo proyecto creado:', response.data.project.name);",
+                  "    console.log('Project ID:', response.data.project._id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Sistema de E-commerce\",\n  \"description\": \"Desarrollo de plataforma de comercio electrónico con funcionalidades avanzadas de carrito, pagos y gestión de inventario\",\n  \"category\": \"{{category_id}}\",\n  \"startDate\": \"2024-01-15T00:00:00.000Z\",\n  \"endDate\": \"2024-06-15T00:00:00.000Z\",\n  \"estimatedHours\": 800,\n  \"budget\": 50000,\n  \"priority\": \"High\",\n  \"tags\": [\"ecommerce\", \"react\", \"nodejs\", \"mongodb\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/projects",
+              "host": ["{{base_url}}"],
+              "path": ["projects"]
+            }
+          }
+        },
+        {
+          "name": "Get Project Details",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    console.log('Proyecto:', response.data.project.name);",
+                  "    console.log('Miembros:', response.data.project.members.length);",
+                  "    console.log('Estado:', response.data.project.status.name);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/projects/{{new_project_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["projects", "{{new_project_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Update Project",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Sistema de E-commerce Avanzado\",\n  \"description\": \"Plataforma de comercio electrónico con IA para recomendaciones, análisis de comportamiento y gestión automatizada de inventario\",\n  \"estimatedHours\": 1200,\n  \"budget\": 75000,\n  \"priority\": \"Critical\",\n  \"tags\": [\"ecommerce\", \"react\", \"nodejs\", \"mongodb\", \"ai\", \"analytics\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/projects/{{new_project_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["projects", "{{new_project_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete Project (Admin Only)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/projects/{{project_to_delete_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["projects", "{{project_to_delete_id}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "👥 PROJECT MEMBERS",
+      "item": [
+        {
+          "name": "Add Member to Project",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    console.log('Miembro agregado al proyecto');",
+                  "    console.log('Total miembros:', response.data.project.members.length);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user\": \"{{user_to_add_id}}\",\n  \"role\": \"{{role_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/projects/{{new_project_id}}/members",
+              "host": ["{{base_url}}"],
+              "path": ["projects", "{{new_project_id}}", "members"]
+            }
+          }
+        },
+        {
+          "name": "Remove Member from Project",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/projects/{{new_project_id}}/members/{{user_to_remove_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["projects", "{{new_project_id}}", "members", "{{user_to_remove_id}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🔄 PROJECT STATUS",
+      "item": [
+        {
+          "name": "Change Project Status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    console.log('Estado cambiado a:', response.data.project.status.name);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"{{project_state_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/projects/{{new_project_id}}/status",
+              "host": ["{{base_url}}"],
+              "path": ["projects", "{{new_project_id}}", "status"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🧪 PROJECT TEST SCENARIOS",
+      "item": [
+        {
+          "name": "Create Mobile App Project",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    pm.environment.set('mobile_project_id', response.data.project._id);",
+                  "    console.log('Proyecto mobile creado:', response.data.project._id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"App de Delivery\",\n  \"description\": \"Aplicación móvil para delivery de comida con tracking en tiempo real y sistema de pagos integrado\",\n  \"category\": \"{{mobile_category_id}}\",\n  \"startDate\": \"2024-02-01T00:00:00.000Z\",\n  \"endDate\": \"2024-08-01T00:00:00.000Z\",\n  \"estimatedHours\": 600,\n  \"budget\": 40000,\n  \"priority\": \"Medium\",\n  \"tags\": [\"mobile\", \"react-native\", \"delivery\", \"payments\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/projects",
+              "host": ["{{base_url}}"],
+              "path": ["projects"]
+            }
+          }
+        },
+        {
+          "name": "Create DevOps Project",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    pm.environment.set('devops_project_id', response.data.project._id);",
+                  "    console.log('Proyecto DevOps creado:', response.data.project._id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Infraestructura Cloud\",\n  \"description\": \"Migración de infraestructura a AWS con implementación de CI/CD, monitoring y escalabilidad automática\",\n  \"category\": \"{{devops_category_id}}\",\n  \"startDate\": \"2024-03-01T00:00:00.000Z\",\n  \"endDate\": \"2024-09-01T00:00:00.000Z\",\n  \"estimatedHours\": 400,\n  \"budget\": 30000,\n  \"priority\": \"High\",\n  \"tags\": [\"aws\", \"docker\", \"kubernetes\", \"cicd\", \"monitoring\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/projects",
+              "host": ["{{base_url}}"],
+              "path": ["projects"]
+            }
+          }
+        },
+        {
+          "name": "Test Project Validation Errors",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Este request debe fallar con errores de validación",
+                  "if (pm.response.code === 400) {",
+                  "    const response = pm.response.json();",
+                  "    console.log('Errores de validación capturados:', response.errors);",
+                  "} else {",
+                  "    console.log('ERROR: Debería haber fallado la validación');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"AB\",\n  \"description\": \"Muy corto\",\n  \"category\": \"invalid-category-id\",\n  \"startDate\": \"2024-06-01T00:00:00.000Z\",\n  \"endDate\": \"2024-01-01T00:00:00.000Z\",\n  \"estimatedHours\": -100,\n  \"budget\": -5000,\n  \"priority\": \"InvalidPriority\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/projects",
+              "host": ["{{base_url}}"],
+              "path": ["projects"]
+            }
+          }
+        },
+        {
+          "name": "Test Unauthorized Access",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Este request debe fallar sin token",
+                  "if (pm.response.code === 401) {",
+                  "    console.log('✅ Autorización funcionando correctamente');",
+                  "} else {",
+                  "    console.log('❌ ERROR: Debería rechazar sin token');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/projects",
+              "host": ["{{base_url}}"],
+              "path": ["projects"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📊 PROJECT SUMMARY",
+      "item": [
+        {
+          "name": "Get All Project IDs",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "console.log('=== RESUMEN DE PROYECTOS ===');",
+                  "console.log('E-commerce Project:', pm.environment.get('new_project_id'));",
+                  "console.log('Mobile Project:', pm.environment.get('mobile_project_id'));",
+                  "console.log('DevOps Project:', pm.environment.get('devops_project_id'));",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    console.log('Total proyectos creados:', response.data.projects.length);",
+                  "    response.data.projects.forEach((project, index) => {",
+                  "        console.log(`${index + 1}. ${project.name} (${project.priority})`);",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/projects",
+              "host": ["{{base_url}}"],
+              "path": ["projects"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
