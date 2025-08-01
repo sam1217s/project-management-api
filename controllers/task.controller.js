@@ -1,76 +1,69 @@
+// src/controllers/task.controller.js
 const Task = require('../models/Task.model');
 const Project = require('../models/Project.model');
 const State = require('../models/State.model');
-const User = require('../models/User.model');
-const { sendResponse, sendError, createPagination } = require('../utils/response.util');
+const { sendResponse, sendError } = require('../utils/response.util');
 
 class TaskController {
-  // Obtener tareas de un proyecto
+  // Listar tareas del proyecto
   async getProjectTasks(req, res) {
     try {
       const { projectId } = req.params;
       const page = parseInt(req.query.page) || 1;
-      const limit = Math.min(parseInt(req.query.limit) || 10, 50);
+      const limit = parseInt(req.query.limit) || 10;
       const skip = (page - 1) * limit;
-      
-      const { search, status, assignedTo, priority, dueDate } = req.query;
+      const status = req.query.status;
+      const priority = req.query.priority;
+      const assignedTo = req.query.assignedTo;
 
-      // Verificar que el usuario tiene acceso al proyecto
+      // Verificar acceso al proyecto
       const project = await Project.findById(projectId);
-      if (!project) {
+      if (!project || !project.isActive) {
         return sendError(res, 404, 'Proyecto no encontrado');
       }
 
-      const isMember = project.owner.toString() === req.user._id.toString() ||
-                      project.members.some(member => member.user.toString() === req.user._id.toString());
-      
-      if (!isMember) {
-        return sendError(res, 403, 'No tienes acceso a este proyecto');
+      const hasAccess = project.owner.toString() === req.user.userId ||
+                       project.members.some(member => 
+                         member.user.toString() === req.user.userId
+                       );
+
+      if (!hasAccess) {
+        return sendError(res, 403, 'Sin acceso al proyecto');
       }
 
       // Construir filtros
-      const filter = {
-        project: projectId,
-        isActive: true
-      };
-
-      if (search) {
-        filter.$text = { $search: search };
-      }
+      const filter = { project: projectId, isActive: true };
       if (status) filter.status = status;
-      if (assignedTo) filter.assignedTo = assignedTo;
       if (priority) filter.priority = priority;
-      
-      if (dueDate) {
-        const date = new Date(dueDate);
-        filter.dueDate = {
-          $gte: new Date(date.setHours(0, 0, 0, 0)),
-          $lt: new Date(date.setHours(23, 59, 59, 999))
-        };
-      }
+      if (assignedTo) filter.assignedTo = assignedTo;
 
       const tasks = await Task.find(filter)
         .populate('assignedTo', 'firstName lastName email avatar')
         .populate('createdBy', 'firstName lastName email')
-        .populate('status', 'name color')
-        .populate('dependencies.task', 'title status')
+        .populate('status', 'name description')
         .skip(skip)
         .limit(limit)
-        .sort({ priority: -1, dueDate: 1, createdAt: -1 });
+        .sort({ dueDate: 1, priority: -1, createdAt: -1 });
 
       const total = await Task.countDocuments(filter);
 
-      sendResponse(res, 200, true, 'Tareas obtenidas exitosamente', {
+      sendResponse(res, 200, true, 'Tareas obtenidas', {
         tasks,
-        pagination: createPagination(page, limit, total)
+        pagination: {
+          page,
+          limit,
+          total,
+          pages: Math.ceil(total / limit)
+        },
+        filters: { status, priority, assignedTo }
       });
     } catch (error) {
-      console.error('Error obteniendo tareas:', error);
+      console.error('Error obtener tareas:', error);
       sendError(res, 500, 'Error interno del servidor');
     }
   }
 
-  // Crear nueva tarea
+  // Crear tarea
   async createTask(req, res) {
     try {
       const { projectId } = req.params;
@@ -81,37 +74,37 @@ class TaskController {
         priority,
         estimatedHours,
         dueDate,
-        tags,
-        dependencies,
-        subtasks
+        tags
       } = req.body;
 
       // Verificar proyecto
       const project = await Project.findById(projectId);
-      if (!project) {
+      if (!project || !project.isActive) {
         return sendError(res, 404, 'Proyecto no encontrado');
       }
 
       // Verificar permisos
-      const canCreate = project.owner.toString() === req.user._id.toString() ||
+      const canCreate = project.owner.toString() === req.user.userId ||
                        project.members.some(member => 
-                         member.user.toString() === req.user._id.toString() && 
-                         member.permissions.includes('write')
+                         member.user.toString() === req.user.userId
                        );
 
       if (!canCreate) {
-        return sendError(res, 403, 'No tienes permisos para crear tareas en este proyecto');
+        return sendError(res, 403, 'Sin permisos para crear tareas');
       }
 
-      // Obtener estado inicial para tareas
-      const initialState = await State.findOne({
+      // Estado inicial
+      let initialState = await State.findOne({
         type: 'Task',
-        isInitial: true,
-        isActive: true
+        name: 'Pendiente'
       });
 
       if (!initialState) {
-        return sendError(res, 500, 'No se encontró estado inicial para tareas');
+        initialState = await State.create({
+          name: 'Pendiente',
+          type: 'Task',
+          description: 'Estado inicial para tareas'
+        });
       }
 
       // Crear tarea
@@ -120,27 +113,24 @@ class TaskController {
         description,
         project: projectId,
         assignedTo,
-        createdBy: req.user._id,
+        createdBy: req.user.userId,
         status: initialState._id,
         priority,
         estimatedHours,
         dueDate,
-        tags,
-        dependencies,
-        subtasks
+        tags: tags || []
       });
 
-      // Poblar relaciones
       await task.populate([
         { path: 'assignedTo', select: 'firstName lastName email avatar' },
         { path: 'createdBy', select: 'firstName lastName email' },
-        { path: 'status', select: 'name color' },
+        { path: 'status', select: 'name description' },
         { path: 'project', select: 'name' }
       ]);
 
       sendResponse(res, 201, true, 'Tarea creada exitosamente', { task });
     } catch (error) {
-      console.error('Error creando tarea:', error);
+      console.error('Error crear tarea:', error);
       sendError(res, 500, 'Error interno del servidor');
     }
   }
@@ -152,28 +142,28 @@ class TaskController {
 
       const task = await Task.findById(id)
         .populate('assignedTo', 'firstName lastName email avatar')
-        .populate('createdBy', 'firstName lastName email avatar')
-        .populate('status', 'name color description')
-        .populate('project', 'name owner members')
-        .populate('dependencies.task', 'title status assignedTo')
-        .populate('attachments.uploadedBy', 'firstName lastName');
+        .populate('createdBy', 'firstName lastName email')
+        .populate('status', 'name description')
+        .populate('project', 'name owner members');
 
       if (!task || !task.isActive) {
         return sendError(res, 404, 'Tarea no encontrada');
       }
 
-      // Verificar acceso al proyecto
+      // Verificar acceso
       const project = task.project;
-      const hasAccess = project.owner.toString() === req.user._id.toString() ||
-                       project.members.some(member => member.user.toString() === req.user._id.toString());
+      const hasAccess = project.owner.toString() === req.user.userId ||
+                       project.members.some(member => 
+                         member.user.toString() === req.user.userId
+                       );
 
       if (!hasAccess) {
-        return sendError(res, 403, 'No tienes acceso a esta tarea');
+        return sendError(res, 403, 'Sin acceso a la tarea');
       }
 
-      sendResponse(res, 200, true, 'Tarea obtenida exitosamente', { task });
+      sendResponse(res, 200, true, 'Tarea obtenida', { task });
     } catch (error) {
-      console.error('Error obteniendo tarea:', error);
+      console.error('Error obtener tarea:', error);
       sendError(res, 500, 'Error interno del servidor');
     }
   }
@@ -191,24 +181,18 @@ class TaskController {
 
       // Verificar permisos
       const project = task.project;
-      const canEdit = project.owner.toString() === req.user._id.toString() ||
-                     task.assignedTo?.toString() === req.user._id.toString() ||
+      const canEdit = project.owner.toString() === req.user.userId ||
+                     task.assignedTo?.toString() === req.user.userId ||
+                     task.createdBy.toString() === req.user.userId ||
                      project.members.some(member => 
-                       member.user.toString() === req.user._id.toString() && 
-                       member.permissions.includes('write')
+                       member.user.toString() === req.user.userId
                      );
 
       if (!canEdit) {
-        return sendError(res, 403, 'No tienes permisos para editar esta tarea');
+        return sendError(res, 403, 'Sin permisos para editar esta tarea');
       }
 
-      // Validar fechas si se están actualizando
-      if (updateData.dueDate && updateData.startDate) {
-        if (new Date(updateData.dueDate) <= new Date(updateData.startDate)) {
-          return sendError(res, 400, 'La fecha límite debe ser posterior a la fecha de inicio');
-        }
-      }
-
+      // Actualizar tarea
       const updatedTask = await Task.findByIdAndUpdate(
         id,
         updateData,
@@ -216,15 +200,37 @@ class TaskController {
       ).populate([
         { path: 'assignedTo', select: 'firstName lastName email avatar' },
         { path: 'createdBy', select: 'firstName lastName email' },
-        { path: 'status', select: 'name color' },
+        { path: 'status', select: 'name description' },
         { path: 'project', select: 'name' }
       ]);
 
-      sendResponse(res, 200, true, 'Tarea actualizada exitosamente', {
-        task: updatedTask
-      });
+      sendResponse(res, 200, true, 'Tarea actualizada exitosamente', { task: updatedTask });
     } catch (error) {
-      console.error('Error actualizando tarea:', error);
+      console.error('Error actualizar tarea:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Eliminar tarea (soft delete)
+  async deleteTask(req, res) {
+    try {
+      const { id } = req.params;
+
+      const task = await Task.findById(id).populate('project');
+      if (!task || !task.isActive) {
+        return sendError(res, 404, 'Tarea no encontrada');
+      }
+
+      // Solo owner del proyecto puede eliminar
+      if (task.project.owner.toString() !== req.user.userId) {
+        return sendError(res, 403, 'Solo el propietario del proyecto puede eliminar tareas');
+      }
+
+      await Task.findByIdAndUpdate(id, { isActive: false });
+
+      sendResponse(res, 200, true, 'Tarea eliminada exitosamente');
+    } catch (error) {
+      console.error('Error eliminar tarea:', error);
       sendError(res, 500, 'Error interno del servidor');
     }
   }
@@ -233,50 +239,40 @@ class TaskController {
   async changeTaskStatus(req, res) {
     try {
       const { id } = req.params;
-      const { statusId } = req.body;
+      const { status } = req.body;
 
-      const task = await Task.findById(id).populate(['status', 'project']);
+      const task = await Task.findById(id);
       if (!task || !task.isActive) {
         return sendError(res, 404, 'Tarea no encontrada');
       }
 
       // Verificar permisos
-      const canChangeStatus = task.assignedTo?.toString() === req.user._id.toString() ||
-                             task.project.owner.toString() === req.user._id.toString();
+      const canChange = task.assignedTo?.toString() === req.user.userId ||
+                       task.createdBy.toString() === req.user.userId;
 
-      if (!canChangeStatus) {
-        return sendError(res, 403, 'No tienes permisos para cambiar el estado de esta tarea');
+      if (!canChange) {
+        return sendError(res, 403, 'Solo el asignado o creador puede cambiar el estado');
       }
 
-      // Verificar nuevo estado
-      const newStatus = await State.findById(statusId);
+      // Verificar estado válido
+      const newStatus = await State.findById(status);
       if (!newStatus || !newStatus.isActive || newStatus.type !== 'Task') {
-        return sendError(res, 400, 'Estado no válido');
+        return sendError(res, 400, 'Estado no válido para tareas');
       }
 
-      // Validar transición
-      const currentStatus = await State.findById(task.status).populate('allowedTransitions');
-      const isValidTransition = currentStatus.allowedTransitions.some(
-        transition => transition._id.toString() === statusId
-      ) || currentStatus._id.toString() === statusId;
+      task.status = status;
 
-      if (!isValidTransition && currentStatus.allowedTransitions.length > 0) {
-        return sendError(res, 400, 'Transición de estado no válida');
-      }
-
-      task.status = statusId;
-
-      // Si el estado es final, marcar como completada
-      if (newStatus.isFinal) {
+      // Si el estado indica completada, marcar fecha
+      if (newStatus.name === 'Completada') {
         task.completedAt = new Date();
       } else {
         task.completedAt = null;
       }
 
       await task.save();
-      await task.populate('status', 'name color description');
+      await task.populate('status', 'name description');
 
-      sendResponse(res, 200, true, 'Estado de tarea cambiado exitosamente', {
+      sendResponse(res, 200, true, 'Estado de tarea actualizado', {
         task: {
           _id: task._id,
           title: task.title,
@@ -285,43 +281,38 @@ class TaskController {
         }
       });
     } catch (error) {
-      console.error('Error cambiando estado de tarea:', error);
+      console.error('Error cambiar estado:', error);
       sendError(res, 500, 'Error interno del servidor');
     }
   }
 
-  // Asignar tarea a usuario
+  // Asignar tarea
   async assignTask(req, res) {
     try {
       const { id } = req.params;
-      const { userId } = req.body;
+      const { user } = req.body;
 
       const task = await Task.findById(id).populate('project');
       if (!task || !task.isActive) {
         return sendError(res, 404, 'Tarea no encontrada');
       }
 
-      // Verificar permisos (solo owner o PM pueden asignar)
-      const project = task.project;
-      const canAssign = project.owner.toString() === req.user._id.toString() ||
-                       project.members.some(member => 
-                         member.user.toString() === req.user._id.toString() && 
-                         member.permissions.includes('manage')
-                       );
-
-      if (!canAssign) {
-        return sendError(res, 403, 'No tienes permisos para asignar tareas');
+      // Solo owner del proyecto puede asignar
+      if (task.project.owner.toString() !== req.user.userId) {
+        return sendError(res, 403, 'Solo el propietario del proyecto puede asignar tareas');
       }
 
       // Verificar que el usuario es miembro del proyecto
-      const isProjectMember = project.owner.toString() === userId ||
-                             project.members.some(member => member.user.toString() === userId);
+      const isProjectMember = task.project.owner.toString() === user ||
+                             task.project.members.some(member => 
+                               member.user.toString() === user
+                             );
 
       if (!isProjectMember) {
         return sendError(res, 400, 'El usuario debe ser miembro del proyecto');
       }
 
-      task.assignedTo = userId;
+      task.assignedTo = user;
       await task.save();
 
       await task.populate('assignedTo', 'firstName lastName email avatar');
@@ -334,48 +325,31 @@ class TaskController {
         }
       });
     } catch (error) {
-      console.error('Error asignando tarea:', error);
+      console.error('Error asignar tarea:', error);
       sendError(res, 500, 'Error interno del servidor');
     }
   }
 
-  // Obtener tareas asignadas al usuario actual
+  // Mis tareas
   async getMyTasks(req, res) {
     try {
       const page = parseInt(req.query.page) || 1;
-      const limit = Math.min(parseInt(req.query.limit) || 10, 50);
+      const limit = parseInt(req.query.limit) || 10;
       const skip = (page - 1) * limit;
-      
-      const { status, priority, project, dueDate } = req.query;
+      const status = req.query.status;
+      const priority = req.query.priority;
 
       const filter = {
-        assignedTo: req.user._id,
+        assignedTo: req.user.userId,
         isActive: true
       };
 
       if (status) filter.status = status;
       if (priority) filter.priority = priority;
-      if (project) filter.project = project;
-
-      if (dueDate) {
-        const today = new Date();
-        if (dueDate === 'overdue') {
-          filter.dueDate = { $lt: today };
-          filter.completedAt = { $exists: false };
-        } else if (dueDate === 'today') {
-          filter.dueDate = {
-            $gte: new Date(today.setHours(0, 0, 0, 0)),
-            $lt: new Date(today.setHours(23, 59, 59, 999))
-          };
-        } else if (dueDate === 'week') {
-          const weekFromNow = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-          filter.dueDate = { $lte: weekFromNow };
-        }
-      }
 
       const tasks = await Task.find(filter)
-        .populate('project', 'name owner')
-        .populate('status', 'name color')
+        .populate('project', 'name')
+        .populate('status', 'name description')
         .populate('createdBy', 'firstName lastName')
         .skip(skip)
         .limit(limit)
@@ -385,58 +359,32 @@ class TaskController {
 
       // Estadísticas adicionales
       const stats = {
-        total: await Task.countDocuments({ assignedTo: req.user._id, isActive: true }),
+        total: await Task.countDocuments({ assignedTo: req.user.userId, isActive: true }),
         completed: await Task.countDocuments({ 
-          assignedTo: req.user._id, 
+          assignedTo: req.user.userId, 
           isActive: true, 
           completedAt: { $exists: true } 
         }),
         overdue: await Task.countDocuments({
-          assignedTo: req.user._id,
+          assignedTo: req.user.userId,
           isActive: true,
           dueDate: { $lt: new Date() },
           completedAt: { $exists: false }
         })
       };
 
-      sendResponse(res, 200, true, 'Mis tareas obtenidas exitosamente', {
+      sendResponse(res, 200, true, 'Mis tareas obtenidas', {
         tasks,
-        stats,
-        pagination: createPagination(page, limit, total)
+        pagination: {
+          page,
+          limit,
+          total,
+          pages: Math.ceil(total / limit)
+        },
+        stats
       });
     } catch (error) {
-      console.error('Error obteniendo mis tareas:', error);
-      sendError(res, 500, 'Error interno del servidor');
-    }
-  }
-
-  // Actualizar subtarea
-  async updateSubtask(req, res) {
-    try {
-      const { id, subtaskId } = req.params;
-      const { title, completed } = req.body;
-
-      const task = await Task.findById(id);
-      if (!task || !task.isActive) {
-        return sendError(res, 404, 'Tarea no encontrada');
-      }
-
-      const subtask = task.subtasks.id(subtaskId);
-      if (!subtask) {
-        return sendError(res, 404, 'Subtarea no encontrada');
-      }
-
-      if (title) subtask.title = title;
-      if (typeof completed === 'boolean') subtask.completed = completed;
-
-      await task.save();
-
-      sendResponse(res, 200, true, 'Subtarea actualizada exitosamente', {
-        subtask,
-        progress: task.subtaskProgress
-      });
-    } catch (error) {
-      console.error('Error actualizando subtarea:', error);
+      console.error('Error obtener mis tareas:', error);
       sendError(res, 500, 'Error interno del servidor');
     }
   }

@@ -1,21 +1,19 @@
 const express = require('express');
 const router = express.Router();
 const taskController = require('../controllers/task.controller');
+const { validateTask, validateTaskStatus, validateAssign } = require('../validators/task.validator');
 const { authenticate } = require('../middlewares/auth.middleware');
-const { validateTask, validateTaskStatus, validateAssignment } = require('../validators/task.validator');
-const { validateRequest } = require('../middlewares/validation.middleware');
+const { handleValidation } = require('../middlewares/validation.middleware');
 
-// Todas las rutas requieren autenticación
 router.use(authenticate);
 
-// Rutas de tareas
-router.get('/my-tasks', taskController.getMyTasks);
 router.get('/projects/:projectId/tasks', taskController.getProjectTasks);
-router.post('/projects/:projectId/tasks', validateTask, validateRequest, taskController.createTask);
+router.post('/projects/:projectId/tasks', validateTask, handleValidation, taskController.createTask);
+router.get('/my-tasks', taskController.getMyTasks);
 router.get('/:id', taskController.getTask);
-router.put('/:id', validateTask, validateRequest, taskController.updateTask);
-router.put('/:id/status', validateTaskStatus, validateRequest, taskController.changeTaskStatus);
-router.put('/:id/assign', validateAssignment, validateRequest, taskController.assignTask);
-router.put('/:id/subtasks/:subtaskId', taskController.updateSubtask);
+router.put('/:id', validateTask, handleValidation, taskController.updateTask);
+router.delete('/:id', taskController.deleteTask);
+router.put('/:id/status', validateTaskStatus, handleValidation, taskController.changeTaskStatus);
+router.put('/:id/assign', validateAssign, handleValidation, taskController.assignTask);
 
 module.exports = router;

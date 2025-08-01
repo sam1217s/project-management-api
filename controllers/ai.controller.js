@@ -1,18 +1,47 @@
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const axios = require('axios');
 const Task = require('../models/Task.model');
 const Project = require('../models/Project.model');
-const Comment = require('../models/comment.model');
+const Comment = require('../models/Comment.model');
+const State = require('../models/State.model');
 const { sendResponse, sendError } = require('../utils/response.util');
 
-// Inicializar Gemini
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: 'gemini-1.0-pro' });
+// Configuración DeepSeek
+const DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions';
+const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
 
 class AIController {
+  // Función helper para llamar a DeepSeek
+  async callDeepSeek(messages, maxTokens = 2000, temperature = 0.7) {
+    if (!DEEPSEEK_API_KEY) {
+      throw new Error('DeepSeek API no configurado');
+    }
+
+    try {
+      const response = await axios.post(DEEPSEEK_API_URL, {
+        model: 'deepseek-chat',
+        messages: messages,
+        max_tokens: maxTokens,
+        temperature: temperature,
+        stream: false
+      }, {
+        headers: {
+          'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        timeout: 30000
+      });
+
+      return response.data.choices[0].message.content;
+    } catch (error) {
+      console.error('Error DeepSeek:', error.response?.data || error.message);
+      throw error;
+    }
+  }
+
   // Generar tareas automáticamente
   async generateTasks(req, res) {
     try {
-      const { projectDescription, projectId, category, estimatedHours } = req.body;
+      const { projectDescription, projectId } = req.body;
 
       // Verificar acceso al proyecto
       const project = await Project.findById(projectId).populate('category');
@@ -20,469 +49,208 @@ class AIController {
         return sendError(res, 404, 'Proyecto no encontrado');
       }
 
-      const hasAccess = project.owner.toString() === req.user._id.toString() ||
+      const hasAccess = project.owner.toString() === req.user.userId ||
                        project.members.some(member => 
-                         member.user.toString() === req.user._id.toString() && 
-                         member.permissions.includes('write')
+                         member.user.toString() === req.user.userId
                        );
 
       if (!hasAccess) {
-        return sendError(res, 403, 'No tienes permisos para generar tareas en este proyecto');
+        return sendError(res, 403, 'Sin acceso al proyecto');
       }
 
-      // Crear prompt para OpenAI
-      const prompt = this.createTaskGenerationPrompt(projectDescription, project.category.name, estimatedHours);
-
-      try {
-        const result = await model.generateContent(prompt);
-        const aiResponse = result?.response?.candidates?.[0]?.content?.parts?.[0]?.text || result?.response?.text || '';
-        const generatedTasks = this.parseAITaskResponse(aiResponse);
-
-        // Opcional: Crear las tareas automáticamente si se especifica
-        if (req.body.autoCreate) {
-          const createdTasks = await this.createTasksFromAI(generatedTasks, projectId, req.user._id);
-          
-          sendResponse(res, 201, true, 'Tareas generadas y creadas exitosamente', {
-            generatedTasks,
-            createdTasks,
-            aiMetadata: {
-              prompt,
-              model: 'gemini-1.0-pro',
-              generatedAt: new Date()
-            }
-          });
-        } else {
-          sendResponse(res, 200, true, 'Tareas generadas exitosamente', {
-            generatedTasks,
-            aiMetadata: {
-              prompt,
-              model: 'gemini-1.0-pro',
-              generatedAt: new Date()
-            }
-          });
-        }
-      } catch (aiError) {
-        console.error('Error con Gemini:', aiError);
-        sendError(res, 500, 'Error generando tareas con Gemini');
-      }
-    } catch (error) {
-      console.error('Error en generación de tareas:', error);
-      sendError(res, 500, 'Error interno del servidor');
-    }
-  }
-
-  // Analizar proyecto y sugerir mejoras
-  async analyzeProject(req, res) {
-    try {
-      const { projectId } = req.body;
-
-      const project = await Project.findById(projectId)
-        .populate('category')
-        .populate('status')
-        .populate('owner', 'firstName lastName')
-        .populate('members.user', 'firstName lastName');
-
-      if (!project) {
-        return sendError(res, 404, 'Proyecto no encontrado');
-      }
-
-      // Obtener tareas del proyecto
-      const tasks = await Task.find({ project: projectId, isActive: true })
-        .populate('status', 'name')
-        .populate('assignedTo', 'firstName lastName');
-
-      // Obtener comentarios recientes
-      const recentComments = await Comment.find({
-        projectId,
-        createdAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
-        isDeleted: false
-      }).populate('author', 'firstName lastName');
-
-      // Crear análisis con IA
-      const analysisPrompt = this.createProjectAnalysisPrompt(project, tasks, recentComments);
-
-      try {
-        const result = await model.generateContent(analysisPrompt);
-        const analysis = result?.response?.candidates?.[0]?.content?.parts?.[0]?.text || result?.response?.text || '';
-        const parsedAnalysis = this.parseProjectAnalysis(analysis);
-
-        sendResponse(res, 200, true, 'Análisis de proyecto completado', {
-          analysis: parsedAnalysis,
-          projectStats: {
-            totalTasks: tasks.length,
-            completedTasks: tasks.filter(t => t.completedAt).length,
-            overdueTasks: tasks.filter(t => t.dueDate < new Date() && !t.completedAt).length,
-            progress: project.progress,
-            daysRemaining: project.daysRemaining
-          },
-          aiMetadata: {
-            analyzedAt: new Date(),
-            model: 'gemini-1.0-pro'
-          }
+      if (!DEEPSEEK_API_KEY) {
+        // Fallback sin IA
+        const fallbackTasks = this.generateFallbackTasks(project.category.name, projectDescription);
+        return sendResponse(res, 200, true, 'Tareas generadas (modo básico)', {
+          generatedTasks: fallbackTasks.tasks,
+          projectId,
+          aiMetadata: { model: 'fallback', provider: 'Internal', generatedAt: new Date() }
         });
-      } catch (aiError) {
-        console.error('Error con análisis Gemini:', aiError);
-        sendError(res, 500, 'Error analizando proyecto con Gemini');
-      }
-    } catch (error) {
-      console.error('Error en análisis de proyecto:', error);
-      sendError(res, 500, 'Error interno del servidor');
-    }
-  }
-
-  // Estimar tiempo de tareas
-  async estimateTime(req, res) {
-    try {
-      const { taskDescription, complexity, technology, teamExperience } = req.body;
-
-      const estimationPrompt = this.createTimeEstimationPrompt(
-        taskDescription, 
-        complexity, 
-        technology, 
-        teamExperience
-      );
-
-      try {
-        const result = await model.generateContent(estimationPrompt);
-        const estimation = result?.response?.candidates?.[0]?.content?.parts?.[0]?.text || result?.response?.text || '';
-        const parsedEstimation = this.parseTimeEstimation(estimation);
-
-        sendResponse(res, 200, true, 'Estimación de tiempo completada', {
-          estimation: parsedEstimation,
-          aiMetadata: {
-            estimatedAt: new Date(),
-            model: 'gemini-1.0-pro',
-            confidence: parsedEstimation.confidence || 0.8
-          }
-        });
-      } catch (aiError) {
-        console.error('Error con estimación Gemini:', aiError);
-        sendError(res, 500, 'Error estimando tiempo con Gemini');
-      }
-    } catch (error) {
-      console.error('Error en estimación de tiempo:', error);
-      sendError(res, 500, 'Error interno del servidor');
-    }
-  }
-
-  // Generar resumen de progreso
-  async generateSummary(req, res) {
-    try {
-      const { projectId, period = 'week' } = req.body;
-
-      const project = await Project.findById(projectId)
-        .populate('category')
-        .populate('status');
-
-      if (!project) {
-        return sendError(res, 404, 'Proyecto no encontrado');
       }
 
-      // Calcular fechas según el período
-      const now = new Date();
-      let startDate;
-      
-      switch (period) {
-        case 'week':
-          startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-          break;
-        case 'month':
-          startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-          break;
-        default:
-          startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      }
+      const messages = [
+        {
+          role: 'system',
+          content: 'Eres un experto project manager. Genera tareas específicas en formato JSON válido.'
+        },
+        {
+          role: 'user',
+          content: `Proyecto: ${project.name}
+Categoría: ${project.category.name}
+Descripción: ${projectDescription}
 
-      // Obtener datos del período
-      const tasksInPeriod = await Task.find({
-        project: projectId,
-        createdAt: { $gte: startDate },
-        isActive: true
-      }).populate('assignedTo', 'firstName lastName');
-
-      const completedTasks = await Task.find({
-        project: projectId,
-        completedAt: { $gte: startDate },
-        isActive: true
-      }).populate('assignedTo', 'firstName lastName');
-
-      const summaryPrompt = this.createProgressSummaryPrompt(
-        project, 
-        tasksInPeriod, 
-        completedTasks, 
-        period
-      );
-
-      try {
-        const result = await model.generateContent(summaryPrompt);
-        const summary = result?.response?.candidates?.[0]?.content?.parts?.[0]?.text || result?.response?.text || '';
-
-        sendResponse(res, 200, true, 'Resumen generado exitosamente', {
-          summary,
-          period,
-          stats: {
-            tasksCreated: tasksInPeriod.length,
-            tasksCompleted: completedTasks.length,
-            currentProgress: project.progress,
-            totalTasks: await Task.countDocuments({ project: projectId, isActive: true })
-          },
-          aiMetadata: {
-            generatedAt: new Date(),
-            model: 'gemini-1.0-pro',
-            period
-          }
-        });
-      } catch (aiError) {
-        console.error('Error generando resumen Gemini:', aiError);
-        sendError(res, 500, 'Error generando resumen con Gemini');
-      }
-    } catch (error) {
-      console.error('Error en generación de resumen:', error);
-      sendError(res, 500, 'Error interno del servidor');
-    }
-  }
-
-  // Métodos auxiliares para crear prompts
-  createTaskGenerationPrompt(description, category, estimatedHours) {
-    return `
-Genera una lista de tareas específicas y detalladas para el siguiente proyecto:
-
-DESCRIPCIÓN DEL PROYECTO:
-${description}
-
-CATEGORÍA: ${category}
-HORAS ESTIMADAS TOTALES: ${estimatedHours || 'No especificado'}
-
-Por favor, genera entre 8-15 tareas que sean:
-1. Específicas y accionables
-2. Apropiadas para la categoría del proyecto
-3. Ordenadas lógicamente por dependencias
-4. Con estimaciones de tiempo realistas
-
-Formato de respuesta (JSON):
+Genera 8-12 tareas en formato JSON:
 {
   "tasks": [
     {
-      "title": "Título de la tarea",
-      "description": "Descripción detallada de qué hacer",
-      "estimatedHours": número,
-      "priority": "Low|Medium|High|Critical",
-      "tags": ["tag1", "tag2"],
-      "dependencies": ["título de tarea previa si aplica"]
+      "title": "Título específico",
+      "description": "Descripción detallada",
+      "estimatedHours": 8,
+      "priority": "High"
     }
   ]
-}
-    `;
-  }
+}`
+        }
+      ];
 
-  createProjectAnalysisPrompt(project, tasks, comments) {
-    const tasksSummary = tasks.map(t => `- ${t.title} (${t.status.name})`).join('\n');
-    const commentsSummary = comments.slice(0, 5).map(c => `- ${c.content.substring(0, 100)}...`).join('\n');
-
-    return `
-Analiza el siguiente proyecto y proporciona recomendaciones:
-
-PROYECTO: ${project.name}
-DESCRIPCIÓN: ${project.description}
-PROGRESO: ${project.progress}%
-ESTADO: ${project.status.name}
-MIEMBROS: ${project.members.length}
-
-TAREAS (${tasks.length} total):
-${tasksSummary}
-
-COMENTARIOS RECIENTES:
-${commentsSummary}
-
-Por favor analiza:
-1. Estado general del proyecto
-2. Posibles riesgos o bloqueos
-3. Recomendaciones para mejorar eficiencia
-4. Sugerencias para el equipo
-
-Responde en formato JSON:
-{
-  "overallHealth": "Excellent|Good|Fair|Poor",
-  "risks": ["riesgo1", "riesgo2"],
-  "recommendations": ["recomendación1", "recomendación2"],
-  "nextSteps": ["paso1", "paso2"]
-}
-    `;
-  }
-
-  createTimeEstimationPrompt(description, complexity, technology, experience) {
-    return `
-Estima el tiempo necesario para completar esta tarea:
-
-DESCRIPCIÓN: ${description}
-COMPLEJIDAD: ${complexity || 'Media'}
-TECNOLOGÍA: ${technology || 'General'}
-EXPERIENCIA DEL EQUIPO: ${experience || 'Intermedia'}
-
-Proporciona:
-1. Estimación optimista (todo sale bien)
-2. Estimación realista (escenario normal)
-3. Estimación pesimista (con complicaciones)
-4. Recomendación final
-5. Factores de riesgo
-
-Formato JSON:
-{
-  "optimistic": horas,
-  "realistic": horas,
-  "pessimistic": horas,
-  "recommended": horas,
-  "confidence": 0.1-1.0,
-  "riskFactors": ["factor1", "factor2"],
-  "breakdown": ["subtarea1: X horas", "subtarea2: Y horas"]
-}
-    `;
-  }
-
-  createProgressSummaryPrompt(project, newTasks, completedTasks, period) {
-    return `
-Crea un resumen ejecutivo del progreso del proyecto en la última ${period === 'week' ? 'semana' : 'mes'}:
-
-PROYECTO: ${project.name}
-PROGRESO ACTUAL: ${project.progress}%
-
-NUEVAS TAREAS (${newTasks.length}):
-${newTasks.map(t => `- ${t.title}`).join('\n')}
-
-TAREAS COMPLETADAS (${completedTasks.length}):
-${completedTasks.map(t => `- ${t.title}`).join('\n')}
-
-Genera un resumen que incluya:
-1. Logros principales
-2. Métricas de productividad
-3. Desafíos enfrentados
-4. Próximos pasos
-5. Recomendaciones
-
-Mantén un tono profesional y ejecutivo.
-    `;
-  }
-
-  // Métodos auxiliares para parsear respuestas de IA
-  parseAITaskResponse(response) {
-    try {
-      // Intentar parsear como JSON
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        return JSON.parse(jsonMatch[0]);
-      }
-      
-      // Si no es JSON, parsear manualmente
-      return this.parseTasksFromText(response);
-    } catch (error) {
-      console.error('Error parseando respuesta de IA:', error);
-      return { tasks: [] };
-    }
-  }
-
-  async createTasksFromAI(generatedTasks, projectId, userId) {
-    const createdTasks = [];
-    
-    // Obtener estado inicial
-    const initialState = await State.findOne({
-      type: 'Task',
-      isInitial: true,
-      isActive: true
-    });
-
-    for (const taskData of generatedTasks.tasks || []) {
       try {
-        const task = await Task.create({
-          title: taskData.title,
-          description: taskData.description,
-          project: projectId,
-          createdBy: userId,
-          status: initialState._id,
-          priority: taskData.priority || 'Medium',
-          estimatedHours: taskData.estimatedHours || 0,
-          dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 días por defecto
-          tags: taskData.tags || [],
-          aiGenerated: true,
+        const aiResponse = await this.callDeepSeek(messages, 2500, 0.7);
+        
+        let generatedTasks;
+        try {
+          const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
+          generatedTasks = jsonMatch ? JSON.parse(jsonMatch[0]) : null;
+        } catch (parseError) {
+          generatedTasks = null;
+        }
+
+        if (!generatedTasks) {
+          generatedTasks = this.generateFallbackTasks(project.category.name, projectDescription);
+        }
+
+        sendResponse(res, 200, true, 'Tareas generadas con DeepSeek AI', {
+          generatedTasks: generatedTasks.tasks || [],
+          projectId,
           aiMetadata: {
-            confidence: 0.8,
-            estimationSource: 'AI Generation',
-            generatedPrompt: 'Task generation from project description'
+            model: 'deepseek-chat',
+            provider: 'DeepSeek',
+            generatedAt: new Date()
           }
         });
-
-        createdTasks.push(task);
-      } catch (error) {
-        console.error('Error creando tarea generada por IA:', error);
-      }
-    }
-
-    return createdTasks;
-  }
-
-  parseTasksFromText(text) {
-    // Implementar parser simple para texto plano
-    const tasks = [];
-    const lines = text.split('\n');
-    
-    let currentTask = null;
-    
-    for (const line of lines) {
-      if (line.match(/^\d+\./)) {
-        if (currentTask) tasks.push(currentTask);
-        currentTask = {
-          title: line.replace(/^\d+\.\s*/, ''),
-          description: '',
-          estimatedHours: 8,
-          priority: 'Medium',
-          tags: []
-        };
-      } else if (currentTask && line.trim()) {
-        currentTask.description += line.trim() + ' ';
-      }
-    }
-    
-    if (currentTask) tasks.push(currentTask);
-    
-    return { tasks };
-  }
-
-  parseProjectAnalysis(analysis) {
-    try {
-      const jsonMatch = analysis.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        return JSON.parse(jsonMatch[0]);
+      } catch (aiError) {
+        const fallbackTasks = this.generateFallbackTasks(project.category.name, projectDescription);
+        sendResponse(res, 200, true, 'Tareas generadas (fallback)', {
+          generatedTasks: fallbackTasks.tasks,
+          projectId
+        });
       }
     } catch (error) {
-      console.error('Error parseando análisis:', error);
+      console.error('Error generar tareas:', error);
+      sendError(res, 500, 'Error interno del servidor');
     }
-    
-    return {
-      overallHealth: 'Good',
-      risks: [],
-      recommendations: [analysis],
-      nextSteps: []
-    };
   }
 
-  parseTimeEstimation(estimation) {
+  // Otros métodos de IA (analizar, estimar, etc.)
+  async analyzeProject(req, res) {
     try {
-      const jsonMatch = estimation.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        return JSON.parse(jsonMatch[0]);
+      const { projectId } = req.body;
+      const project = await Project.findById(projectId);
+      
+      if (!project) {
+        return sendError(res, 404, 'Proyecto no encontrado');
       }
+
+      const tasks = await Task.find({ project: projectId, isActive: true });
+      const completedTasks = tasks.filter(t => t.completedAt);
+      const progress = tasks.length > 0 ? Math.round((completedTasks.length / tasks.length) * 100) : 0;
+
+      const analysis = {
+        overallHealth: progress > 70 ? 'Good' : progress > 40 ? 'Fair' : 'Poor',
+        healthScore: progress,
+        risks: progress < 50 ? ['Progreso lento'] : ['Sin riesgos críticos'],
+        recommendations: ['Revisar cronograma', 'Mejorar comunicación'],
+        summary: `Proyecto con ${progress}% de progreso`
+      };
+
+      sendResponse(res, 200, true, 'Análisis completado', { analysis });
     } catch (error) {
-      console.error('Error parseando estimación:', error);
+      sendError(res, 500, 'Error interno del servidor');
     }
-    
-    return {
-      optimistic: 4,
-      realistic: 8,
-      pessimistic: 16,
-      recommended: 8,
-      confidence: 0.7,
-      riskFactors: [],
-      breakdown: []
-    };
+  }
+
+  async estimateTime(req, res) {
+    try {
+      const { taskDescription, complexity = 'Medium' } = req.body;
+      
+      const wordCount = taskDescription.split(' ').length;
+      const multiplier = { Low: 0.7, Medium: 1.0, High: 1.4 };
+      const baseHours = Math.max(4, Math.ceil(wordCount / 6) * multiplier[complexity]);
+
+      const estimation = {
+        recommended: baseHours,
+        range: { min: Math.ceil(baseHours * 0.7), max: Math.ceil(baseHours * 1.4) },
+        confidence: 'Medium'
+      };
+
+      sendResponse(res, 200, true, 'Estimación completada', { estimation });
+    } catch (error) {
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  async generateSummary(req, res) {
+    try {
+      const { projectId } = req.body;
+      const project = await Project.findById(projectId);
+      
+      if (!project) {
+        return sendError(res, 404, 'Proyecto no encontrado');
+      }
+
+      const summary = `# Resumen del Proyecto: ${project.name}\n\nEstado actual del proyecto con información básica.`;
+      
+      sendResponse(res, 200, true, 'Resumen generado', { summary });
+    } catch (error) {
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  async suggestImprovements(req, res) {
+    try {
+      const suggestions = [
+        '📋 Implementar reuniones de seguimiento semanales',
+        '📊 Crear dashboard de métricas del proyecto',
+        '🎯 Definir criterios de aceptación más claros'
+      ];
+
+      sendResponse(res, 200, true, 'Sugerencias generadas', { suggestions });
+    } catch (error) {
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Helper para generar tareas básicas
+  generateFallbackTasks(projectType, description) {
+    const basicTasks = [
+      {
+        title: "Análisis de requerimientos",
+        description: "Definir y documentar requerimientos funcionales y no funcionales",
+        estimatedHours: 8,
+        priority: "High"
+      },
+      {
+        title: "Diseño de arquitectura",
+        description: "Crear diseño técnico y arquitectura del sistema",
+        estimatedHours: 12,
+        priority: "High"
+      },
+      {
+        title: "Configuración inicial",
+        description: "Configurar entorno de desarrollo y herramientas",
+        estimatedHours: 6,
+        priority: "Medium"
+      },
+      {
+        title: "Implementación backend",
+        description: "Desarrollar lógica de negocio y API endpoints",
+        estimatedHours: 24,
+        priority: "Critical"
+      },
+      {
+        title: "Desarrollo frontend",
+        description: "Crear interfaz de usuario y componentes",
+        estimatedHours: 20,
+        priority: "High"
+      },
+      {
+        title: "Testing y QA",
+        description: "Implementar tests y control de calidad",
+        estimatedHours: 12,
+        priority: "High"
+      }
+    ];
+
+    return { tasks: basicTasks };
   }
 }
 

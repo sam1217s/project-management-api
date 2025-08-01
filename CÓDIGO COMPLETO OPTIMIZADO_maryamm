@@ -8,1200 +8,1200 @@
 // ===================================
 
 // package.json - ACTUALIZAR DEPENDENCIAS
-{
-  "name": "project-management-api",
-  "version": "1.0.0",
-  "description": "API de gestión de proyectos con IA DeepSeek",
-  "main": "server.js",
-  "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js",
-    "test": "jest",
-    "test-deepseek": "node scripts/test-deepseek.js",
-    "seed-data": "node scripts/init-default-data.js"
-  },
-  "dependencies": {
-    "express": "^4.18.2",
-    "mongoose": "^7.0.0",
-    "bcryptjs": "^2.4.3",
-    "jsonwebtoken": "^9.0.0",
-    "express-validator": "^6.14.0",
-    "cors": "^2.8.5",
-    "helmet": "^6.0.0",
-    "express-rate-limit": "^6.7.0",
-    "dotenv": "^16.0.0",
-    "multer": "^1.4.5-lts.1",
-    "axios": "^1.6.0"
-  },
-  "devDependencies": {
-    "nodemon": "^2.0.20",
-    "jest": "^29.0.0",
-    "supertest": "^6.3.0"
-  }
-}
-
-// .env - AGREGAR VARIABLE DEEPSEEK
-DEEPSEEK_API_KEY=sk-your_deepseek_api_key_here
-
-// ===================================
-// 2. MODELOS
-// ===================================
-
-// src/models/Task.model.js
-const mongoose = require('mongoose');
-
-const taskSchema = new mongoose.Schema({
-  title: {
-    type: String,
-    required: true,
-    trim: true,
-    maxlength: 100
-  },
-  description: {
-    type: String,
-    required: true,
-    maxlength: 1000
-  },
-  project: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Project',
-    required: true
-  },
-  assignedTo: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
-  },
-  createdBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
-  },
-  status: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'State',
-    required: true
-  },
-  priority: {
-    type: String,
-    enum: ['Low', 'Medium', 'High', 'Critical'],
-    default: 'Medium'
-  },
-  estimatedHours: {
-    type: Number,
-    min: 0,
-    default: 0
-  },
-  actualHours: {
-    type: Number,
-    min: 0,
-    default: 0
-  },
-  startDate: {
-    type: Date,
-    default: Date.now
-  },
-  dueDate: {
-    type: Date,
-    required: true
-  },
-  completedAt: {
-    type: Date
-  },
-  tags: [{
-    type: String,
-    trim: true,
-    maxlength: 20
-  }],
-  isActive: {
-    type: Boolean,
-    default: true
-  }
-}, {
-  timestamps: true,
-  toJSON: { virtuals: true }
-});
-
-// Virtual para verificar si está vencida
-taskSchema.virtual('isOverdue').get(function() {
-  return this.dueDate < new Date() && !this.completedAt;
-});
-
-// Índices para mejor rendimiento
-taskSchema.index({ project: 1 });
-taskSchema.index({ assignedTo: 1 });
-taskSchema.index({ status: 1 });
-taskSchema.index({ dueDate: 1 });
-taskSchema.index({ isActive: 1 });
-taskSchema.index({ createdBy: 1 });
-
-module.exports = mongoose.model('Task', taskSchema);
-
-// ===================================
-// src/models/Comment.model.js
-// ===================================
-const mongoose = require('mongoose');
-
-const commentSchema = new mongoose.Schema({
-  content: {
-    type: String,
-    required: true,
-    trim: true,
-    maxlength: 2000
-  },
-  author: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
-  },
-  projectid: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Project',
-    required: true
-  },
-  editedAt: {
-    type: Date
-  }
-}, {
-  timestamps: true
-});
-
-// Índices
-commentSchema.index({ projectid: 1, createdAt: -1 });
-commentSchema.index({ author: 1 });
-
-module.exports = mongoose.model('Comment', commentSchema);
-
-// ===================================
-// 3. CONTROLADORES
-// ===================================
-
-// src/controllers/task.controller.js
-const Task = require('../models/Task.model');
-const Project = require('../models/Project.model');
-const State = require('../models/State.model');
-const { sendResponse, sendError } = require('../utils/response.util');
-
-class TaskController {
-  // Listar tareas del proyecto
-  async getProjectTasks(req, res) {
-    try {
-      const { projectId } = req.params;
-      const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 10;
-      const skip = (page - 1) * limit;
-      const status = req.query.status;
-      const priority = req.query.priority;
-      const assignedTo = req.query.assignedTo;
-
-      // Verificar acceso al proyecto
-      const project = await Project.findById(projectId);
-      if (!project || !project.isActive) {
-        return sendError(res, 404, 'Proyecto no encontrado');
-      }
-
-      const hasAccess = project.owner.toString() === req.user.userId ||
-                       project.members.some(member => 
-                         member.user.toString() === req.user.userId
-                       );
-
-      if (!hasAccess) {
-        return sendError(res, 403, 'Sin acceso al proyecto');
-      }
-
-      // Construir filtros
-      const filter = { project: projectId, isActive: true };
-      if (status) filter.status = status;
-      if (priority) filter.priority = priority;
-      if (assignedTo) filter.assignedTo = assignedTo;
-
-      const tasks = await Task.find(filter)
-        .populate('assignedTo', 'firstName lastName email avatar')
-        .populate('createdBy', 'firstName lastName email')
-        .populate('status', 'name description')
-        .skip(skip)
-        .limit(limit)
-        .sort({ dueDate: 1, priority: -1, createdAt: -1 });
-
-      const total = await Task.countDocuments(filter);
-
-      sendResponse(res, 200, true, 'Tareas obtenidas', {
-        tasks,
-        pagination: {
-          page,
-          limit,
-          total,
-          pages: Math.ceil(total / limit)
-        },
-        filters: { status, priority, assignedTo }
-      });
-    } catch (error) {
-      console.error('Error obtener tareas:', error);
-      sendError(res, 500, 'Error interno del servidor');
-    }
-  }
-
-  // Crear tarea
-  async createTask(req, res) {
-    try {
-      const { projectId } = req.params;
-      const {
-        title,
-        description,
-        assignedTo,
-        priority,
-        estimatedHours,
-        dueDate,
-        tags
-      } = req.body;
-
-      // Verificar proyecto
-      const project = await Project.findById(projectId);
-      if (!project || !project.isActive) {
-        return sendError(res, 404, 'Proyecto no encontrado');
-      }
-
-      // Verificar permisos
-      const canCreate = project.owner.toString() === req.user.userId ||
-                       project.members.some(member => 
-                         member.user.toString() === req.user.userId
-                       );
-
-      if (!canCreate) {
-        return sendError(res, 403, 'Sin permisos para crear tareas');
-      }
-
-      // Estado inicial
-      let initialState = await State.findOne({
-        type: 'Task',
-        name: 'Pendiente'
-      });
-
-      if (!initialState) {
-        initialState = await State.create({
-          name: 'Pendiente',
-          type: 'Task',
-          description: 'Estado inicial para tareas'
-        });
-      }
-
-      // Crear tarea
-      const task = await Task.create({
-        title,
-        description,
-        project: projectId,
-        assignedTo,
-        createdBy: req.user.userId,
-        status: initialState._id,
-        priority,
-        estimatedHours,
-        dueDate,
-        tags: tags || []
-      });
-
-      await task.populate([
-        { path: 'assignedTo', select: 'firstName lastName email avatar' },
-        { path: 'createdBy', select: 'firstName lastName email' },
-        { path: 'status', select: 'name description' },
-        { path: 'project', select: 'name' }
-      ]);
-
-      sendResponse(res, 201, true, 'Tarea creada exitosamente', { task });
-    } catch (error) {
-      console.error('Error crear tarea:', error);
-      sendError(res, 500, 'Error interno del servidor');
-    }
-  }
-
-  // Obtener tarea específica
-  async getTask(req, res) {
-    try {
-      const { id } = req.params;
-
-      const task = await Task.findById(id)
-        .populate('assignedTo', 'firstName lastName email avatar')
-        .populate('createdBy', 'firstName lastName email')
-        .populate('status', 'name description')
-        .populate('project', 'name owner members');
-
-      if (!task || !task.isActive) {
-        return sendError(res, 404, 'Tarea no encontrada');
-      }
-
-      // Verificar acceso
-      const project = task.project;
-      const hasAccess = project.owner.toString() === req.user.userId ||
-                       project.members.some(member => 
-                         member.user.toString() === req.user.userId
-                       );
-
-      if (!hasAccess) {
-        return sendError(res, 403, 'Sin acceso a la tarea');
-      }
-
-      sendResponse(res, 200, true, 'Tarea obtenida', { task });
-    } catch (error) {
-      console.error('Error obtener tarea:', error);
-      sendError(res, 500, 'Error interno del servidor');
-    }
-  }
-
-  // Actualizar tarea
-  async updateTask(req, res) {
-    try {
-      const { id } = req.params;
-      const updateData = req.body;
-
-      const task = await Task.findById(id).populate('project');
-      if (!task || !task.isActive) {
-        return sendError(res, 404, 'Tarea no encontrada');
-      }
-
-      // Verificar permisos
-      const project = task.project;
-      const canEdit = project.owner.toString() === req.user.userId ||
-                     task.assignedTo?.toString() === req.user.userId ||
-                     task.createdBy.toString() === req.user.userId ||
-                     project.members.some(member => 
-                       member.user.toString() === req.user.userId
-                     );
-
-      if (!canEdit) {
-        return sendError(res, 403, 'Sin permisos para editar esta tarea');
-      }
-
-      // Actualizar tarea
-      const updatedTask = await Task.findByIdAndUpdate(
-        id,
-        updateData,
-        { new: true, runValidators: true }
-      ).populate([
-        { path: 'assignedTo', select: 'firstName lastName email avatar' },
-        { path: 'createdBy', select: 'firstName lastName email' },
-        { path: 'status', select: 'name description' },
-        { path: 'project', select: 'name' }
-      ]);
-
-      sendResponse(res, 200, true, 'Tarea actualizada exitosamente', { task: updatedTask });
-    } catch (error) {
-      console.error('Error actualizar tarea:', error);
-      sendError(res, 500, 'Error interno del servidor');
-    }
-  }
-
-  // Eliminar tarea (soft delete)
-  async deleteTask(req, res) {
-    try {
-      const { id } = req.params;
-
-      const task = await Task.findById(id).populate('project');
-      if (!task || !task.isActive) {
-        return sendError(res, 404, 'Tarea no encontrada');
-      }
-
-      // Solo owner del proyecto puede eliminar
-      if (task.project.owner.toString() !== req.user.userId) {
-        return sendError(res, 403, 'Solo el propietario del proyecto puede eliminar tareas');
-      }
-
-      await Task.findByIdAndUpdate(id, { isActive: false });
-
-      sendResponse(res, 200, true, 'Tarea eliminada exitosamente');
-    } catch (error) {
-      console.error('Error eliminar tarea:', error);
-      sendError(res, 500, 'Error interno del servidor');
-    }
-  }
-
-  // Cambiar estado de tarea
-  async changeTaskStatus(req, res) {
-    try {
-      const { id } = req.params;
-      const { status } = req.body;
-
-      const task = await Task.findById(id);
-      if (!task || !task.isActive) {
-        return sendError(res, 404, 'Tarea no encontrada');
-      }
-
-      // Verificar permisos
-      const canChange = task.assignedTo?.toString() === req.user.userId ||
-                       task.createdBy.toString() === req.user.userId;
-
-      if (!canChange) {
-        return sendError(res, 403, 'Solo el asignado o creador puede cambiar el estado');
-      }
-
-      // Verificar estado válido
-      const newStatus = await State.findById(status);
-      if (!newStatus || !newStatus.isActive || newStatus.type !== 'Task') {
-        return sendError(res, 400, 'Estado no válido para tareas');
-      }
-
-      task.status = status;
-
-      // Si el estado indica completada, marcar fecha
-      if (newStatus.name === 'Completada') {
-        task.completedAt = new Date();
-      } else {
-        task.completedAt = null;
-      }
-
-      await task.save();
-      await task.populate('status', 'name description');
-
-      sendResponse(res, 200, true, 'Estado de tarea actualizado', {
-        task: {
-          _id: task._id,
-          title: task.title,
-          status: task.status,
-          completedAt: task.completedAt
-        }
-      });
-    } catch (error) {
-      console.error('Error cambiar estado:', error);
-      sendError(res, 500, 'Error interno del servidor');
-    }
-  }
-
-  // Asignar tarea
-  async assignTask(req, res) {
-    try {
-      const { id } = req.params;
-      const { user } = req.body;
-
-      const task = await Task.findById(id).populate('project');
-      if (!task || !task.isActive) {
-        return sendError(res, 404, 'Tarea no encontrada');
-      }
-
-      // Solo owner del proyecto puede asignar
-      if (task.project.owner.toString() !== req.user.userId) {
-        return sendError(res, 403, 'Solo el propietario del proyecto puede asignar tareas');
-      }
-
-      // Verificar que el usuario es miembro del proyecto
-      const isProjectMember = task.project.owner.toString() === user ||
-                             task.project.members.some(member => 
-                               member.user.toString() === user
-                             );
-
-      if (!isProjectMember) {
-        return sendError(res, 400, 'El usuario debe ser miembro del proyecto');
-      }
-
-      task.assignedTo = user;
-      await task.save();
-
-      await task.populate('assignedTo', 'firstName lastName email avatar');
-
-      sendResponse(res, 200, true, 'Tarea asignada exitosamente', {
-        task: {
-          _id: task._id,
-          title: task.title,
-          assignedTo: task.assignedTo
-        }
-      });
-    } catch (error) {
-      console.error('Error asignar tarea:', error);
-      sendError(res, 500, 'Error interno del servidor');
-    }
-  }
-
-  // Mis tareas
-  async getMyTasks(req, res) {
-    try {
-      const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 10;
-      const skip = (page - 1) * limit;
-      const status = req.query.status;
-      const priority = req.query.priority;
-
-      const filter = {
-        assignedTo: req.user.userId,
-        isActive: true
-      };
-
-      if (status) filter.status = status;
-      if (priority) filter.priority = priority;
-
-      const tasks = await Task.find(filter)
-        .populate('project', 'name')
-        .populate('status', 'name description')
-        .populate('createdBy', 'firstName lastName')
-        .skip(skip)
-        .limit(limit)
-        .sort({ dueDate: 1, priority: -1 });
-
-      const total = await Task.countDocuments(filter);
-
-      // Estadísticas adicionales
-      const stats = {
-        total: await Task.countDocuments({ assignedTo: req.user.userId, isActive: true }),
-        completed: await Task.countDocuments({ 
-          assignedTo: req.user.userId, 
-          isActive: true, 
-          completedAt: { $exists: true } 
-        }),
-        overdue: await Task.countDocuments({
-          assignedTo: req.user.userId,
-          isActive: true,
-          dueDate: { $lt: new Date() },
-          completedAt: { $exists: false }
-        })
-      };
-
-      sendResponse(res, 200, true, 'Mis tareas obtenidas', {
-        tasks,
-        pagination: {
-          page,
-          limit,
-          total,
-          pages: Math.ceil(total / limit)
-        },
-        stats
-      });
-    } catch (error) {
-      console.error('Error obtener mis tareas:', error);
-      sendError(res, 500, 'Error interno del servidor');
-    }
-  }
-}
-
-module.exports = new TaskController();
-
-// ===================================
-// src/controllers/comment.controller.js
-// ===================================
-const Comment = require('../models/Comment.model');
-const Project = require('../models/Project.model');
-const { sendResponse, sendError } = require('../utils/response.util');
-
-class CommentController {
-  // Obtener comentarios del proyecto
-  async getProjectComments(req, res) {
-    try {
-      const { id } = req.params;
-      const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 20;
-      const skip = (page - 1) * limit;
-
-      // Verificar acceso al proyecto
-      const project = await Project.findById(id);
-      if (!project || !project.isActive) {
-        return sendError(res, 404, 'Proyecto no encontrado');
-      }
-
-      const hasAccess = project.owner.toString() === req.user.userId ||
-                       project.members.some(member => 
-                         member.user.toString() === req.user.userId
-                       );
-
-      if (!hasAccess) {
-        return sendError(res, 403, 'Sin acceso al proyecto');
-      }
-
-      const comments = await Comment.find({ projectid: id })
-        .populate('author', 'firstName lastName email avatar')
-        .skip(skip)
-        .limit(limit)
-        .sort({ createdAt: -1 });
-
-      const total = await Comment.countDocuments({ projectid: id });
-
-      sendResponse(res, 200, true, 'Comentarios obtenidos', {
-        comments,
-        pagination: {
-          page,
-          limit,
-          total,
-          pages: Math.ceil(total / limit)
-        }
-      });
-    } catch (error) {
-      console.error('Error obtener comentarios:', error);
-      sendError(res, 500, 'Error interno del servidor');
-    }
-  }
-
-  // Crear comentario
-  async createComment(req, res) {
-    try {
-      const { id } = req.params;
-      const { content } = req.body;
-
-      // Verificar acceso al proyecto
-      const project = await Project.findById(id);
-      if (!project || !project.isActive) {
-        return sendError(res, 404, 'Proyecto no encontrado');
-      }
-
-      const hasAccess = project.owner.toString() === req.user.userId ||
-                       project.members.some(member => 
-                         member.user.toString() === req.user.userId
-                       );
-
-      if (!hasAccess) {
-        return sendError(res, 403, 'Sin acceso al proyecto');
-      }
-
-      const comment = await Comment.create({
-        content,
-        author: req.user.userId,
-        projectid: id
-      });
-
-      await comment.populate('author', 'firstName lastName email avatar');
-
-      sendResponse(res, 201, true, 'Comentario creado exitosamente', { comment });
-    } catch (error) {
-      console.error('Error crear comentario:', error);
-      sendError(res, 500, 'Error interno del servidor');
-    }
-  }
-
-  // Editar comentario
-  async updateComment(req, res) {
-    try {
-      const { id } = req.params;
-      const { content } = req.body;
-
-      const comment = await Comment.findById(id);
-      if (!comment) {
-        return sendError(res, 404, 'Comentario no encontrado');
-      }
-
-      // Solo el autor puede editar
-      if (comment.author.toString() !== req.user.userId) {
-        return sendError(res, 403, 'Solo puedes editar tus propios comentarios');
-      }
-
-      comment.content = content;
-      comment.editedAt = new Date();
-      await comment.save();
-
-      await comment.populate('author', 'firstName lastName email avatar');
-
-      sendResponse(res, 200, true, 'Comentario actualizado exitosamente', { comment });
-    } catch (error) {
-      console.error('Error actualizar comentario:', error);
-      sendError(res, 500, 'Error interno del servidor');
-    }
-  }
-
-  // Eliminar comentario
-  async deleteComment(req, res) {
-    try {
-      const { id } = req.params;
-
-      const comment = await Comment.findById(id);
-      if (!comment) {
-        return sendError(res, 404, 'Comentario no encontrado');
-      }
-
-      // Solo el autor o admin pueden eliminar
-      const canDelete = comment.author.toString() === req.user.userId ||
-                       req.user.role === 'Admin';
-
-      if (!canDelete) {
-        return sendError(res, 403, 'Sin permisos para eliminar este comentario');
-      }
-
-      await Comment.findByIdAndDelete(id);
-
-      sendResponse(res, 200, true, 'Comentario eliminado exitosamente');
-    } catch (error) {
-      console.error('Error eliminar comentario:', error);
-      sendError(res, 500, 'Error interno del servidor');
-    }
-  }
-}
-
-module.exports = new CommentController();
-
-// ===================================
-// src/controllers/ai.controller.js - CON DEEPSEEK
-// ===================================
-const axios = require('axios');
-const Task = require('../models/Task.model');
-const Project = require('../models/Project.model');
-const Comment = require('../models/Comment.model');
-const State = require('../models/State.model');
-const { sendResponse, sendError } = require('../utils/response.util');
-
-// Configuración DeepSeek
-const DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions';
-const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
-
-class AIController {
-  // Función helper para llamar a DeepSeek
-  async callDeepSeek(messages, maxTokens = 2000, temperature = 0.7) {
-    if (!DEEPSEEK_API_KEY) {
-      throw new Error('DeepSeek API no configurado');
-    }
-
-    try {
-      const response = await axios.post(DEEPSEEK_API_URL, {
-        model: 'deepseek-chat',
-        messages: messages,
-        max_tokens: maxTokens,
-        temperature: temperature,
-        stream: false
-      }, {
-        headers: {
-          'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        timeout: 30000
-      });
-
-      return response.data.choices[0].message.content;
-    } catch (error) {
-      console.error('Error DeepSeek:', error.response?.data || error.message);
-      throw error;
-    }
-  }
-
-  // Generar tareas automáticamente
-  async generateTasks(req, res) {
-    try {
-      const { projectDescription, projectId } = req.body;
-
-      // Verificar acceso al proyecto
-      const project = await Project.findById(projectId).populate('category');
-      if (!project) {
-        return sendError(res, 404, 'Proyecto no encontrado');
-      }
-
-      const hasAccess = project.owner.toString() === req.user.userId ||
-                       project.members.some(member => 
-                         member.user.toString() === req.user.userId
-                       );
-
-      if (!hasAccess) {
-        return sendError(res, 403, 'Sin acceso al proyecto');
-      }
-
-      if (!DEEPSEEK_API_KEY) {
-        // Fallback sin IA
-        const fallbackTasks = this.generateFallbackTasks(project.category.name, projectDescription);
-        return sendResponse(res, 200, true, 'Tareas generadas (modo básico)', {
-          generatedTasks: fallbackTasks.tasks,
-          projectId,
-          aiMetadata: { model: 'fallback', provider: 'Internal', generatedAt: new Date() }
-        });
-      }
-
-      const messages = [
-        {
-          role: 'system',
-          content: 'Eres un experto project manager. Genera tareas específicas en formato JSON válido.'
-        },
-        {
-          role: 'user',
-          content: `Proyecto: ${project.name}
-Categoría: ${project.category.name}
-Descripción: ${projectDescription}
-
-Genera 8-12 tareas en formato JSON:
-{
-  "tasks": [
-    {
-      "title": "Título específico",
-      "description": "Descripción detallada",
-      "estimatedHours": 8,
-      "priority": "High"
-    }
-  ]
-}`
-        }
-      ];
-
-      try {
-        const aiResponse = await this.callDeepSeek(messages, 2500, 0.7);
+// {
+//   "name": "project-management-api",
+//   "version": "1.0.0",
+//   "description": "API de gestión de proyectos con IA DeepSeek",
+//   "main": "server.js",
+//   "scripts": {
+//     "start": "node server.js",
+//     "dev": "nodemon server.js",
+//     "test": "jest",
+//     "test-deepseek": "node scripts/test-deepseek.js",
+//     "seed-data": "node scripts/init-default-data.js"
+//   },
+//   "dependencies": {
+//     "express": "^4.18.2",
+//     "mongoose": "^7.0.0",
+//     "bcryptjs": "^2.4.3",
+//     "jsonwebtoken": "^9.0.0",
+//     "express-validator": "^6.14.0",
+//     "cors": "^2.8.5",
+//     "helmet": "^6.0.0",
+//     "express-rate-limit": "^6.7.0",
+//     "dotenv": "^16.0.0",
+//     "multer": "^1.4.5-lts.1",
+//     "axios": "^1.6.0"
+//   },
+//   "devDependencies": {
+//     "nodemon": "^2.0.20",
+//     "jest": "^29.0.0",
+//     "supertest": "^6.3.0"
+//   }
+// }
+
+// // .env - AGREGAR VARIABLE DEEPSEEK
+// DEEPSEEK_API_KEY=sk-your_deepseek_api_key_here
+
+// // ===================================
+// // 2. MODELOS
+// // ===================================
+
+// // src/models/Task.model.js
+// const mongoose = require('mongoose');
+
+// const taskSchema = new mongoose.Schema({
+//   title: {
+//     type: String,
+//     required: true,
+//     trim: true,
+//     maxlength: 100
+//   },
+//   description: {
+//     type: String,
+//     required: true,
+//     maxlength: 1000
+//   },
+//   project: {
+//     type: mongoose.Schema.Types.ObjectId,
+//     ref: 'Project',
+//     required: true
+//   },
+//   assignedTo: {
+//     type: mongoose.Schema.Types.ObjectId,
+//     ref: 'User'
+//   },
+//   createdBy: {
+//     type: mongoose.Schema.Types.ObjectId,
+//     ref: 'User',
+//     required: true
+//   },
+//   status: {
+//     type: mongoose.Schema.Types.ObjectId,
+//     ref: 'State',
+//     required: true
+//   },
+//   priority: {
+//     type: String,
+//     enum: ['Low', 'Medium', 'High', 'Critical'],
+//     default: 'Medium'
+//   },
+//   estimatedHours: {
+//     type: Number,
+//     min: 0,
+//     default: 0
+//   },
+//   actualHours: {
+//     type: Number,
+//     min: 0,
+//     default: 0
+//   },
+//   startDate: {
+//     type: Date,
+//     default: Date.now
+//   },
+//   dueDate: {
+//     type: Date,
+//     required: true
+//   },
+//   completedAt: {
+//     type: Date
+//   },
+//   tags: [{
+//     type: String,
+//     trim: true,
+//     maxlength: 20
+//   }],
+//   isActive: {
+//     type: Boolean,
+//     default: true
+//   }
+// }, {
+//   timestamps: true,
+//   toJSON: { virtuals: true }
+// });
+
+// // Virtual para verificar si está vencida
+// taskSchema.virtual('isOverdue').get(function() {
+//   return this.dueDate < new Date() && !this.completedAt;
+// });
+
+// // Índices para mejor rendimiento
+// taskSchema.index({ project: 1 });
+// taskSchema.index({ assignedTo: 1 });
+// taskSchema.index({ status: 1 });
+// taskSchema.index({ dueDate: 1 });
+// taskSchema.index({ isActive: 1 });
+// taskSchema.index({ createdBy: 1 });
+
+// module.exports = mongoose.model('Task', taskSchema);
+
+// // ===================================
+// // src/models/Comment.model.js
+// // ===================================
+// const mongoose = require('mongoose');
+
+// const commentSchema = new mongoose.Schema({
+//   content: {
+//     type: String,
+//     required: true,
+//     trim: true,
+//     maxlength: 2000
+//   },
+//   author: {
+//     type: mongoose.Schema.Types.ObjectId,
+//     ref: 'User',
+//     required: true
+//   },
+//   projectid: {
+//     type: mongoose.Schema.Types.ObjectId,
+//     ref: 'Project',
+//     required: true
+//   },
+//   editedAt: {
+//     type: Date
+//   }
+// }, {
+//   timestamps: true
+// });
+
+// // Índices
+// commentSchema.index({ projectid: 1, createdAt: -1 });
+// commentSchema.index({ author: 1 });
+
+// module.exports = mongoose.model('Comment', commentSchema);
+
+// // ===================================
+// // 3. CONTROLADORES
+// // ===================================
+
+// // src/controllers/task.controller.js
+// const Task = require('../models/Task.model');
+// const Project = require('../models/Project.model');
+// const State = require('../models/State.model');
+// const { sendResponse, sendError } = require('../utils/response.util');
+
+// class TaskController {
+//   // Listar tareas del proyecto
+//   async getProjectTasks(req, res) {
+//     try {
+//       const { projectId } = req.params;
+//       const page = parseInt(req.query.page) || 1;
+//       const limit = parseInt(req.query.limit) || 10;
+//       const skip = (page - 1) * limit;
+//       const status = req.query.status;
+//       const priority = req.query.priority;
+//       const assignedTo = req.query.assignedTo;
+
+//       // Verificar acceso al proyecto
+//       const project = await Project.findById(projectId);
+//       if (!project || !project.isActive) {
+//         return sendError(res, 404, 'Proyecto no encontrado');
+//       }
+
+//       const hasAccess = project.owner.toString() === req.user.userId ||
+//                        project.members.some(member => 
+//                          member.user.toString() === req.user.userId
+//                        );
+
+//       if (!hasAccess) {
+//         return sendError(res, 403, 'Sin acceso al proyecto');
+//       }
+
+//       // Construir filtros
+//       const filter = { project: projectId, isActive: true };
+//       if (status) filter.status = status;
+//       if (priority) filter.priority = priority;
+//       if (assignedTo) filter.assignedTo = assignedTo;
+
+//       const tasks = await Task.find(filter)
+//         .populate('assignedTo', 'firstName lastName email avatar')
+//         .populate('createdBy', 'firstName lastName email')
+//         .populate('status', 'name description')
+//         .skip(skip)
+//         .limit(limit)
+//         .sort({ dueDate: 1, priority: -1, createdAt: -1 });
+
+//       const total = await Task.countDocuments(filter);
+
+//       sendResponse(res, 200, true, 'Tareas obtenidas', {
+//         tasks,
+//         pagination: {
+//           page,
+//           limit,
+//           total,
+//           pages: Math.ceil(total / limit)
+//         },
+//         filters: { status, priority, assignedTo }
+//       });
+//     } catch (error) {
+//       console.error('Error obtener tareas:', error);
+//       sendError(res, 500, 'Error interno del servidor');
+//     }
+//   }
+
+//   // Crear tarea
+//   async createTask(req, res) {
+//     try {
+//       const { projectId } = req.params;
+//       const {
+//         title,
+//         description,
+//         assignedTo,
+//         priority,
+//         estimatedHours,
+//         dueDate,
+//         tags
+//       } = req.body;
+
+//       // Verificar proyecto
+//       const project = await Project.findById(projectId);
+//       if (!project || !project.isActive) {
+//         return sendError(res, 404, 'Proyecto no encontrado');
+//       }
+
+//       // Verificar permisos
+//       const canCreate = project.owner.toString() === req.user.userId ||
+//                        project.members.some(member => 
+//                          member.user.toString() === req.user.userId
+//                        );
+
+//       if (!canCreate) {
+//         return sendError(res, 403, 'Sin permisos para crear tareas');
+//       }
+
+//       // Estado inicial
+//       let initialState = await State.findOne({
+//         type: 'Task',
+//         name: 'Pendiente'
+//       });
+
+//       if (!initialState) {
+//         initialState = await State.create({
+//           name: 'Pendiente',
+//           type: 'Task',
+//           description: 'Estado inicial para tareas'
+//         });
+//       }
+
+//       // Crear tarea
+//       const task = await Task.create({
+//         title,
+//         description,
+//         project: projectId,
+//         assignedTo,
+//         createdBy: req.user.userId,
+//         status: initialState._id,
+//         priority,
+//         estimatedHours,
+//         dueDate,
+//         tags: tags || []
+//       });
+
+//       await task.populate([
+//         { path: 'assignedTo', select: 'firstName lastName email avatar' },
+//         { path: 'createdBy', select: 'firstName lastName email' },
+//         { path: 'status', select: 'name description' },
+//         { path: 'project', select: 'name' }
+//       ]);
+
+//       sendResponse(res, 201, true, 'Tarea creada exitosamente', { task });
+//     } catch (error) {
+//       console.error('Error crear tarea:', error);
+//       sendError(res, 500, 'Error interno del servidor');
+//     }
+//   }
+
+//   // Obtener tarea específica
+//   async getTask(req, res) {
+//     try {
+//       const { id } = req.params;
+
+//       const task = await Task.findById(id)
+//         .populate('assignedTo', 'firstName lastName email avatar')
+//         .populate('createdBy', 'firstName lastName email')
+//         .populate('status', 'name description')
+//         .populate('project', 'name owner members');
+
+//       if (!task || !task.isActive) {
+//         return sendError(res, 404, 'Tarea no encontrada');
+//       }
+
+//       // Verificar acceso
+//       const project = task.project;
+//       const hasAccess = project.owner.toString() === req.user.userId ||
+//                        project.members.some(member => 
+//                          member.user.toString() === req.user.userId
+//                        );
+
+//       if (!hasAccess) {
+//         return sendError(res, 403, 'Sin acceso a la tarea');
+//       }
+
+//       sendResponse(res, 200, true, 'Tarea obtenida', { task });
+//     } catch (error) {
+//       console.error('Error obtener tarea:', error);
+//       sendError(res, 500, 'Error interno del servidor');
+//     }
+//   }
+
+//   // Actualizar tarea
+//   async updateTask(req, res) {
+//     try {
+//       const { id } = req.params;
+//       const updateData = req.body;
+
+//       const task = await Task.findById(id).populate('project');
+//       if (!task || !task.isActive) {
+//         return sendError(res, 404, 'Tarea no encontrada');
+//       }
+
+//       // Verificar permisos
+//       const project = task.project;
+//       const canEdit = project.owner.toString() === req.user.userId ||
+//                      task.assignedTo?.toString() === req.user.userId ||
+//                      task.createdBy.toString() === req.user.userId ||
+//                      project.members.some(member => 
+//                        member.user.toString() === req.user.userId
+//                      );
+
+//       if (!canEdit) {
+//         return sendError(res, 403, 'Sin permisos para editar esta tarea');
+//       }
+
+//       // Actualizar tarea
+//       const updatedTask = await Task.findByIdAndUpdate(
+//         id,
+//         updateData,
+//         { new: true, runValidators: true }
+//       ).populate([
+//         { path: 'assignedTo', select: 'firstName lastName email avatar' },
+//         { path: 'createdBy', select: 'firstName lastName email' },
+//         { path: 'status', select: 'name description' },
+//         { path: 'project', select: 'name' }
+//       ]);
+
+//       sendResponse(res, 200, true, 'Tarea actualizada exitosamente', { task: updatedTask });
+//     } catch (error) {
+//       console.error('Error actualizar tarea:', error);
+//       sendError(res, 500, 'Error interno del servidor');
+//     }
+//   }
+
+//   // Eliminar tarea (soft delete)
+//   async deleteTask(req, res) {
+//     try {
+//       const { id } = req.params;
+
+//       const task = await Task.findById(id).populate('project');
+//       if (!task || !task.isActive) {
+//         return sendError(res, 404, 'Tarea no encontrada');
+//       }
+
+//       // Solo owner del proyecto puede eliminar
+//       if (task.project.owner.toString() !== req.user.userId) {
+//         return sendError(res, 403, 'Solo el propietario del proyecto puede eliminar tareas');
+//       }
+
+//       await Task.findByIdAndUpdate(id, { isActive: false });
+
+//       sendResponse(res, 200, true, 'Tarea eliminada exitosamente');
+//     } catch (error) {
+//       console.error('Error eliminar tarea:', error);
+//       sendError(res, 500, 'Error interno del servidor');
+//     }
+//   }
+
+//   // Cambiar estado de tarea
+//   async changeTaskStatus(req, res) {
+//     try {
+//       const { id } = req.params;
+//       const { status } = req.body;
+
+//       const task = await Task.findById(id);
+//       if (!task || !task.isActive) {
+//         return sendError(res, 404, 'Tarea no encontrada');
+//       }
+
+//       // Verificar permisos
+//       const canChange = task.assignedTo?.toString() === req.user.userId ||
+//                        task.createdBy.toString() === req.user.userId;
+
+//       if (!canChange) {
+//         return sendError(res, 403, 'Solo el asignado o creador puede cambiar el estado');
+//       }
+
+//       // Verificar estado válido
+//       const newStatus = await State.findById(status);
+//       if (!newStatus || !newStatus.isActive || newStatus.type !== 'Task') {
+//         return sendError(res, 400, 'Estado no válido para tareas');
+//       }
+
+//       task.status = status;
+
+//       // Si el estado indica completada, marcar fecha
+//       if (newStatus.name === 'Completada') {
+//         task.completedAt = new Date();
+//       } else {
+//         task.completedAt = null;
+//       }
+
+//       await task.save();
+//       await task.populate('status', 'name description');
+
+//       sendResponse(res, 200, true, 'Estado de tarea actualizado', {
+//         task: {
+//           _id: task._id,
+//           title: task.title,
+//           status: task.status,
+//           completedAt: task.completedAt
+//         }
+//       });
+//     } catch (error) {
+//       console.error('Error cambiar estado:', error);
+//       sendError(res, 500, 'Error interno del servidor');
+//     }
+//   }
+
+//   // Asignar tarea
+//   async assignTask(req, res) {
+//     try {
+//       const { id } = req.params;
+//       const { user } = req.body;
+
+//       const task = await Task.findById(id).populate('project');
+//       if (!task || !task.isActive) {
+//         return sendError(res, 404, 'Tarea no encontrada');
+//       }
+
+//       // Solo owner del proyecto puede asignar
+//       if (task.project.owner.toString() !== req.user.userId) {
+//         return sendError(res, 403, 'Solo el propietario del proyecto puede asignar tareas');
+//       }
+
+//       // Verificar que el usuario es miembro del proyecto
+//       const isProjectMember = task.project.owner.toString() === user ||
+//                              task.project.members.some(member => 
+//                                member.user.toString() === user
+//                              );
+
+//       if (!isProjectMember) {
+//         return sendError(res, 400, 'El usuario debe ser miembro del proyecto');
+//       }
+
+//       task.assignedTo = user;
+//       await task.save();
+
+//       await task.populate('assignedTo', 'firstName lastName email avatar');
+
+//       sendResponse(res, 200, true, 'Tarea asignada exitosamente', {
+//         task: {
+//           _id: task._id,
+//           title: task.title,
+//           assignedTo: task.assignedTo
+//         }
+//       });
+//     } catch (error) {
+//       console.error('Error asignar tarea:', error);
+//       sendError(res, 500, 'Error interno del servidor');
+//     }
+//   }
+
+//   // Mis tareas
+//   async getMyTasks(req, res) {
+//     try {
+//       const page = parseInt(req.query.page) || 1;
+//       const limit = parseInt(req.query.limit) || 10;
+//       const skip = (page - 1) * limit;
+//       const status = req.query.status;
+//       const priority = req.query.priority;
+
+//       const filter = {
+//         assignedTo: req.user.userId,
+//         isActive: true
+//       };
+
+//       if (status) filter.status = status;
+//       if (priority) filter.priority = priority;
+
+//       const tasks = await Task.find(filter)
+//         .populate('project', 'name')
+//         .populate('status', 'name description')
+//         .populate('createdBy', 'firstName lastName')
+//         .skip(skip)
+//         .limit(limit)
+//         .sort({ dueDate: 1, priority: -1 });
+
+//       const total = await Task.countDocuments(filter);
+
+//       // Estadísticas adicionales
+//       const stats = {
+//         total: await Task.countDocuments({ assignedTo: req.user.userId, isActive: true }),
+//         completed: await Task.countDocuments({ 
+//           assignedTo: req.user.userId, 
+//           isActive: true, 
+//           completedAt: { $exists: true } 
+//         }),
+//         overdue: await Task.countDocuments({
+//           assignedTo: req.user.userId,
+//           isActive: true,
+//           dueDate: { $lt: new Date() },
+//           completedAt: { $exists: false }
+//         })
+//       };
+
+//       sendResponse(res, 200, true, 'Mis tareas obtenidas', {
+//         tasks,
+//         pagination: {
+//           page,
+//           limit,
+//           total,
+//           pages: Math.ceil(total / limit)
+//         },
+//         stats
+//       });
+//     } catch (error) {
+//       console.error('Error obtener mis tareas:', error);
+//       sendError(res, 500, 'Error interno del servidor');
+//     }
+//   }
+// }
+
+// module.exports = new TaskController();
+
+// // ===================================
+// // src/controllers/comment.controller.js
+// // ===================================
+// const Comment = require('../models/Comment.model');
+// const Project = require('../models/Project.model');
+// const { sendResponse, sendError } = require('../utils/response.util');
+
+// class CommentController {
+//   // Obtener comentarios del proyecto
+//   async getProjectComments(req, res) {
+//     try {
+//       const { id } = req.params;
+//       const page = parseInt(req.query.page) || 1;
+//       const limit = parseInt(req.query.limit) || 20;
+//       const skip = (page - 1) * limit;
+
+//       // Verificar acceso al proyecto
+//       const project = await Project.findById(id);
+//       if (!project || !project.isActive) {
+//         return sendError(res, 404, 'Proyecto no encontrado');
+//       }
+
+//       const hasAccess = project.owner.toString() === req.user.userId ||
+//                        project.members.some(member => 
+//                          member.user.toString() === req.user.userId
+//                        );
+
+//       if (!hasAccess) {
+//         return sendError(res, 403, 'Sin acceso al proyecto');
+//       }
+
+//       const comments = await Comment.find({ projectid: id })
+//         .populate('author', 'firstName lastName email avatar')
+//         .skip(skip)
+//         .limit(limit)
+//         .sort({ createdAt: -1 });
+
+//       const total = await Comment.countDocuments({ projectid: id });
+
+//       sendResponse(res, 200, true, 'Comentarios obtenidos', {
+//         comments,
+//         pagination: {
+//           page,
+//           limit,
+//           total,
+//           pages: Math.ceil(total / limit)
+//         }
+//       });
+//     } catch (error) {
+//       console.error('Error obtener comentarios:', error);
+//       sendError(res, 500, 'Error interno del servidor');
+//     }
+//   }
+
+//   // Crear comentario
+//   async createComment(req, res) {
+//     try {
+//       const { id } = req.params;
+//       const { content } = req.body;
+
+//       // Verificar acceso al proyecto
+//       const project = await Project.findById(id);
+//       if (!project || !project.isActive) {
+//         return sendError(res, 404, 'Proyecto no encontrado');
+//       }
+
+//       const hasAccess = project.owner.toString() === req.user.userId ||
+//                        project.members.some(member => 
+//                          member.user.toString() === req.user.userId
+//                        );
+
+//       if (!hasAccess) {
+//         return sendError(res, 403, 'Sin acceso al proyecto');
+//       }
+
+//       const comment = await Comment.create({
+//         content,
+//         author: req.user.userId,
+//         projectid: id
+//       });
+
+//       await comment.populate('author', 'firstName lastName email avatar');
+
+//       sendResponse(res, 201, true, 'Comentario creado exitosamente', { comment });
+//     } catch (error) {
+//       console.error('Error crear comentario:', error);
+//       sendError(res, 500, 'Error interno del servidor');
+//     }
+//   }
+
+//   // Editar comentario
+//   async updateComment(req, res) {
+//     try {
+//       const { id } = req.params;
+//       const { content } = req.body;
+
+//       const comment = await Comment.findById(id);
+//       if (!comment) {
+//         return sendError(res, 404, 'Comentario no encontrado');
+//       }
+
+//       // Solo el autor puede editar
+//       if (comment.author.toString() !== req.user.userId) {
+//         return sendError(res, 403, 'Solo puedes editar tus propios comentarios');
+//       }
+
+//       comment.content = content;
+//       comment.editedAt = new Date();
+//       await comment.save();
+
+//       await comment.populate('author', 'firstName lastName email avatar');
+
+//       sendResponse(res, 200, true, 'Comentario actualizado exitosamente', { comment });
+//     } catch (error) {
+//       console.error('Error actualizar comentario:', error);
+//       sendError(res, 500, 'Error interno del servidor');
+//     }
+//   }
+
+//   // Eliminar comentario
+//   async deleteComment(req, res) {
+//     try {
+//       const { id } = req.params;
+
+//       const comment = await Comment.findById(id);
+//       if (!comment) {
+//         return sendError(res, 404, 'Comentario no encontrado');
+//       }
+
+//       // Solo el autor o admin pueden eliminar
+//       const canDelete = comment.author.toString() === req.user.userId ||
+//                        req.user.role === 'Admin';
+
+//       if (!canDelete) {
+//         return sendError(res, 403, 'Sin permisos para eliminar este comentario');
+//       }
+
+//       await Comment.findByIdAndDelete(id);
+
+//       sendResponse(res, 200, true, 'Comentario eliminado exitosamente');
+//     } catch (error) {
+//       console.error('Error eliminar comentario:', error);
+//       sendError(res, 500, 'Error interno del servidor');
+//     }
+//   }
+// }
+
+// module.exports = new CommentController();
+
+// // ===================================
+// // src/controllers/ai.controller.js - CON DEEPSEEK
+// // ===================================
+// const axios = require('axios');
+// const Task = require('../models/Task.model');
+// const Project = require('../models/Project.model');
+// const Comment = require('../models/Comment.model');
+// const State = require('../models/State.model');
+// const { sendResponse, sendError } = require('../utils/response.util');
+
+// // Configuración DeepSeek
+// const DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions';
+// const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
+
+// class AIController {
+//   // Función helper para llamar a DeepSeek
+//   async callDeepSeek(messages, maxTokens = 2000, temperature = 0.7) {
+//     if (!DEEPSEEK_API_KEY) {
+//       throw new Error('DeepSeek API no configurado');
+//     }
+
+//     try {
+//       const response = await axios.post(DEEPSEEK_API_URL, {
+//         model: 'deepseek-chat',
+//         messages: messages,
+//         max_tokens: maxTokens,
+//         temperature: temperature,
+//         stream: false
+//       }, {
+//         headers: {
+//           'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
+//           'Content-Type': 'application/json'
+//         },
+//         timeout: 30000
+//       });
+
+//       return response.data.choices[0].message.content;
+//     } catch (error) {
+//       console.error('Error DeepSeek:', error.response?.data || error.message);
+//       throw error;
+//     }
+//   }
+
+//   // Generar tareas automáticamente
+//   async generateTasks(req, res) {
+//     try {
+//       const { projectDescription, projectId } = req.body;
+
+//       // Verificar acceso al proyecto
+//       const project = await Project.findById(projectId).populate('category');
+//       if (!project) {
+//         return sendError(res, 404, 'Proyecto no encontrado');
+//       }
+
+//       const hasAccess = project.owner.toString() === req.user.userId ||
+//                        project.members.some(member => 
+//                          member.user.toString() === req.user.userId
+//                        );
+
+//       if (!hasAccess) {
+//         return sendError(res, 403, 'Sin acceso al proyecto');
+//       }
+
+//       if (!DEEPSEEK_API_KEY) {
+//         // Fallback sin IA
+//         const fallbackTasks = this.generateFallbackTasks(project.category.name, projectDescription);
+//         return sendResponse(res, 200, true, 'Tareas generadas (modo básico)', {
+//           generatedTasks: fallbackTasks.tasks,
+//           projectId,
+//           aiMetadata: { model: 'fallback', provider: 'Internal', generatedAt: new Date() }
+//         });
+//       }
+
+//       const messages = [
+//         {
+//           role: 'system',
+//           content: 'Eres un experto project manager. Genera tareas específicas en formato JSON válido.'
+//         },
+//         {
+//           role: 'user',
+//           content: `Proyecto: ${project.name}
+// Categoría: ${project.category.name}
+// Descripción: ${projectDescription}
+
+// Genera 8-12 tareas en formato JSON:
+// {
+//   "tasks": [
+//     {
+//       "title": "Título específico",
+//       "description": "Descripción detallada",
+//       "estimatedHours": 8,
+//       "priority": "High"
+//     }
+//   ]
+// }`
+//         }
+//       ];
+
+//       try {
+//         const aiResponse = await this.callDeepSeek(messages, 2500, 0.7);
         
-        let generatedTasks;
-        try {
-          const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
-          generatedTasks = jsonMatch ? JSON.parse(jsonMatch[0]) : null;
-        } catch (parseError) {
-          generatedTasks = null;
-        }
+//         let generatedTasks;
+//         try {
+//           const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
+//           generatedTasks = jsonMatch ? JSON.parse(jsonMatch[0]) : null;
+//         } catch (parseError) {
+//           generatedTasks = null;
+//         }
 
-        if (!generatedTasks) {
-          generatedTasks = this.generateFallbackTasks(project.category.name, projectDescription);
-        }
+//         if (!generatedTasks) {
+//           generatedTasks = this.generateFallbackTasks(project.category.name, projectDescription);
+//         }
 
-        sendResponse(res, 200, true, 'Tareas generadas con DeepSeek AI', {
-          generatedTasks: generatedTasks.tasks || [],
-          projectId,
-          aiMetadata: {
-            model: 'deepseek-chat',
-            provider: 'DeepSeek',
-            generatedAt: new Date()
-          }
-        });
-      } catch (aiError) {
-        const fallbackTasks = this.generateFallbackTasks(project.category.name, projectDescription);
-        sendResponse(res, 200, true, 'Tareas generadas (fallback)', {
-          generatedTasks: fallbackTasks.tasks,
-          projectId
-        });
-      }
-    } catch (error) {
-      console.error('Error generar tareas:', error);
-      sendError(res, 500, 'Error interno del servidor');
-    }
-  }
+//         sendResponse(res, 200, true, 'Tareas generadas con DeepSeek AI', {
+//           generatedTasks: generatedTasks.tasks || [],
+//           projectId,
+//           aiMetadata: {
+//             model: 'deepseek-chat',
+//             provider: 'DeepSeek',
+//             generatedAt: new Date()
+//           }
+//         });
+//       } catch (aiError) {
+//         const fallbackTasks = this.generateFallbackTasks(project.category.name, projectDescription);
+//         sendResponse(res, 200, true, 'Tareas generadas (fallback)', {
+//           generatedTasks: fallbackTasks.tasks,
+//           projectId
+//         });
+//       }
+//     } catch (error) {
+//       console.error('Error generar tareas:', error);
+//       sendError(res, 500, 'Error interno del servidor');
+//     }
+//   }
 
-  // Otros métodos de IA (analizar, estimar, etc.)
-  async analyzeProject(req, res) {
-    try {
-      const { projectId } = req.body;
-      const project = await Project.findById(projectId);
+//   // Otros métodos de IA (analizar, estimar, etc.)
+//   async analyzeProject(req, res) {
+//     try {
+//       const { projectId } = req.body;
+//       const project = await Project.findById(projectId);
       
-      if (!project) {
-        return sendError(res, 404, 'Proyecto no encontrado');
-      }
+//       if (!project) {
+//         return sendError(res, 404, 'Proyecto no encontrado');
+//       }
 
-      const tasks = await Task.find({ project: projectId, isActive: true });
-      const completedTasks = tasks.filter(t => t.completedAt);
-      const progress = tasks.length > 0 ? Math.round((completedTasks.length / tasks.length) * 100) : 0;
+//       const tasks = await Task.find({ project: projectId, isActive: true });
+//       const completedTasks = tasks.filter(t => t.completedAt);
+//       const progress = tasks.length > 0 ? Math.round((completedTasks.length / tasks.length) * 100) : 0;
 
-      const analysis = {
-        overallHealth: progress > 70 ? 'Good' : progress > 40 ? 'Fair' : 'Poor',
-        healthScore: progress,
-        risks: progress < 50 ? ['Progreso lento'] : ['Sin riesgos críticos'],
-        recommendations: ['Revisar cronograma', 'Mejorar comunicación'],
-        summary: `Proyecto con ${progress}% de progreso`
-      };
+//       const analysis = {
+//         overallHealth: progress > 70 ? 'Good' : progress > 40 ? 'Fair' : 'Poor',
+//         healthScore: progress,
+//         risks: progress < 50 ? ['Progreso lento'] : ['Sin riesgos críticos'],
+//         recommendations: ['Revisar cronograma', 'Mejorar comunicación'],
+//         summary: `Proyecto con ${progress}% de progreso`
+//       };
 
-      sendResponse(res, 200, true, 'Análisis completado', { analysis });
-    } catch (error) {
-      sendError(res, 500, 'Error interno del servidor');
-    }
-  }
+//       sendResponse(res, 200, true, 'Análisis completado', { analysis });
+//     } catch (error) {
+//       sendError(res, 500, 'Error interno del servidor');
+//     }
+//   }
 
-  async estimateTime(req, res) {
-    try {
-      const { taskDescription, complexity = 'Medium' } = req.body;
+//   async estimateTime(req, res) {
+//     try {
+//       const { taskDescription, complexity = 'Medium' } = req.body;
       
-      const wordCount = taskDescription.split(' ').length;
-      const multiplier = { Low: 0.7, Medium: 1.0, High: 1.4 };
-      const baseHours = Math.max(4, Math.ceil(wordCount / 6) * multiplier[complexity]);
+//       const wordCount = taskDescription.split(' ').length;
+//       const multiplier = { Low: 0.7, Medium: 1.0, High: 1.4 };
+//       const baseHours = Math.max(4, Math.ceil(wordCount / 6) * multiplier[complexity]);
 
-      const estimation = {
-        recommended: baseHours,
-        range: { min: Math.ceil(baseHours * 0.7), max: Math.ceil(baseHours * 1.4) },
-        confidence: 'Medium'
-      };
+//       const estimation = {
+//         recommended: baseHours,
+//         range: { min: Math.ceil(baseHours * 0.7), max: Math.ceil(baseHours * 1.4) },
+//         confidence: 'Medium'
+//       };
 
-      sendResponse(res, 200, true, 'Estimación completada', { estimation });
-    } catch (error) {
-      sendError(res, 500, 'Error interno del servidor');
-    }
-  }
+//       sendResponse(res, 200, true, 'Estimación completada', { estimation });
+//     } catch (error) {
+//       sendError(res, 500, 'Error interno del servidor');
+//     }
+//   }
 
-  async generateSummary(req, res) {
-    try {
-      const { projectId } = req.body;
-      const project = await Project.findById(projectId);
+//   async generateSummary(req, res) {
+//     try {
+//       const { projectId } = req.body;
+//       const project = await Project.findById(projectId);
       
-      if (!project) {
-        return sendError(res, 404, 'Proyecto no encontrado');
-      }
+//       if (!project) {
+//         return sendError(res, 404, 'Proyecto no encontrado');
+//       }
 
-      const summary = `# Resumen del Proyecto: ${project.name}\n\nEstado actual del proyecto con información básica.`;
+//       const summary = `# Resumen del Proyecto: ${project.name}\n\nEstado actual del proyecto con información básica.`;
       
-      sendResponse(res, 200, true, 'Resumen generado', { summary });
-    } catch (error) {
-      sendError(res, 500, 'Error interno del servidor');
-    }
-  }
+//       sendResponse(res, 200, true, 'Resumen generado', { summary });
+//     } catch (error) {
+//       sendError(res, 500, 'Error interno del servidor');
+//     }
+//   }
 
-  async suggestImprovements(req, res) {
-    try {
-      const suggestions = [
-        '📋 Implementar reuniones de seguimiento semanales',
-        '📊 Crear dashboard de métricas del proyecto',
-        '🎯 Definir criterios de aceptación más claros'
-      ];
+//   async suggestImprovements(req, res) {
+//     try {
+//       const suggestions = [
+//         '📋 Implementar reuniones de seguimiento semanales',
+//         '📊 Crear dashboard de métricas del proyecto',
+//         '🎯 Definir criterios de aceptación más claros'
+//       ];
 
-      sendResponse(res, 200, true, 'Sugerencias generadas', { suggestions });
-    } catch (error) {
-      sendError(res, 500, 'Error interno del servidor');
-    }
-  }
+//       sendResponse(res, 200, true, 'Sugerencias generadas', { suggestions });
+//     } catch (error) {
+//       sendError(res, 500, 'Error interno del servidor');
+//     }
+//   }
 
-  // Helper para generar tareas básicas
-  generateFallbackTasks(projectType, description) {
-    const basicTasks = [
-      {
-        title: "Análisis de requerimientos",
-        description: "Definir y documentar requerimientos funcionales y no funcionales",
-        estimatedHours: 8,
-        priority: "High"
-      },
-      {
-        title: "Diseño de arquitectura",
-        description: "Crear diseño técnico y arquitectura del sistema",
-        estimatedHours: 12,
-        priority: "High"
-      },
-      {
-        title: "Configuración inicial",
-        description: "Configurar entorno de desarrollo y herramientas",
-        estimatedHours: 6,
-        priority: "Medium"
-      },
-      {
-        title: "Implementación backend",
-        description: "Desarrollar lógica de negocio y API endpoints",
-        estimatedHours: 24,
-        priority: "Critical"
-      },
-      {
-        title: "Desarrollo frontend",
-        description: "Crear interfaz de usuario y componentes",
-        estimatedHours: 20,
-        priority: "High"
-      },
-      {
-        title: "Testing y QA",
-        description: "Implementar tests y control de calidad",
-        estimatedHours: 12,
-        priority: "High"
-      }
-    ];
+//   // Helper para generar tareas básicas
+//   generateFallbackTasks(projectType, description) {
+//     const basicTasks = [
+//       {
+//         title: "Análisis de requerimientos",
+//         description: "Definir y documentar requerimientos funcionales y no funcionales",
+//         estimatedHours: 8,
+//         priority: "High"
+//       },
+//       {
+//         title: "Diseño de arquitectura",
+//         description: "Crear diseño técnico y arquitectura del sistema",
+//         estimatedHours: 12,
+//         priority: "High"
+//       },
+//       {
+//         title: "Configuración inicial",
+//         description: "Configurar entorno de desarrollo y herramientas",
+//         estimatedHours: 6,
+//         priority: "Medium"
+//       },
+//       {
+//         title: "Implementación backend",
+//         description: "Desarrollar lógica de negocio y API endpoints",
+//         estimatedHours: 24,
+//         priority: "Critical"
+//       },
+//       {
+//         title: "Desarrollo frontend",
+//         description: "Crear interfaz de usuario y componentes",
+//         estimatedHours: 20,
+//         priority: "High"
+//       },
+//       {
+//         title: "Testing y QA",
+//         description: "Implementar tests y control de calidad",
+//         estimatedHours: 12,
+//         priority: "High"
+//       }
+//     ];
 
-    return { tasks: basicTasks };
-  }
-}
+//     return { tasks: basicTasks };
+//   }
+// }
 
-module.exports = new AIController();
+// module.exports = new AIController();
 
-// ===================================
-// 4. RUTAS
-// ===================================
+// // ===================================
+// // 4. RUTAS
+// // ===================================
 
-// src/routes/task.routes.js
-const express = require('express');
-const router = express.Router();
-const taskController = require('../controllers/task.controller');
-const { validateTask, validateTaskStatus, validateAssign } = require('../validators/task.validator');
-const { authenticate } = require('../middlewares/auth.middleware');
-const { handleValidation } = require('../middlewares/validation.middleware');
+// // src/routes/task.routes.js
+// const express = require('express');
+// const router = express.Router();
+// const taskController = require('../controllers/task.controller');
+// const { validateTask, validateTaskStatus, validateAssign } = require('../validators/task.validator');
+// const { authenticate } = require('../middlewares/auth.middleware');
+// const { handleValidation } = require('../middlewares/validation.middleware');
 
-router.use(authenticate);
+// router.use(authenticate);
 
-router.get('/projects/:projectId/tasks', taskController.getProjectTasks);
-router.post('/projects/:projectId/tasks', validateTask, handleValidation, taskController.createTask);
-router.get('/my-tasks', taskController.getMyTasks);
-router.get('/:id', taskController.getTask);
-router.put('/:id', validateTask, handleValidation, taskController.updateTask);
-router.delete('/:id', taskController.deleteTask);
-router.put('/:id/status', validateTaskStatus, handleValidation, taskController.changeTaskStatus);
-router.put('/:id/assign', validateAssign, handleValidation, taskController.assignTask);
+// router.get('/projects/:projectId/tasks', taskController.getProjectTasks);
+// router.post('/projects/:projectId/tasks', validateTask, handleValidation, taskController.createTask);
+// router.get('/my-tasks', taskController.getMyTasks);
+// router.get('/:id', taskController.getTask);
+// router.put('/:id', validateTask, handleValidation, taskController.updateTask);
+// router.delete('/:id', taskController.deleteTask);
+// router.put('/:id/status', validateTaskStatus, handleValidation, taskController.changeTaskStatus);
+// router.put('/:id/assign', validateAssign, handleValidation, taskController.assignTask);
 
-module.exports = router;
+// module.exports = router;
 
-// src/routes/comment.routes.js
-const express = require('express');
-const router = express.Router();
-const commentController = require('../controllers/comment.controller');
-const { validateComment } = require('../validators/comment.validator');
-const { authenticate } = require('../middlewares/auth.middleware');
-const { handleValidation } = require('../middlewares/validation.middleware');
+// // src/routes/comment.routes.js
+// const express = require('express');
+// const router = express.Router();
+// const commentController = require('../controllers/comment.controller');
+// const { validateComment } = require('../validators/comment.validator');
+// const { authenticate } = require('../middlewares/auth.middleware');
+// const { handleValidation } = require('../middlewares/validation.middleware');
 
-router.use(authenticate);
+// router.use(authenticate);
 
-router.get('/projects/:id/comments', commentController.getProjectComments);
-router.post('/projects/:id/comments', validateComment, handleValidation, commentController.createComment);
-router.put('/:id', validateComment, handleValidation, commentController.updateComment);
-router.delete('/:id', commentController.deleteComment);
+// router.get('/projects/:id/comments', commentController.getProjectComments);
+// router.post('/projects/:id/comments', validateComment, handleValidation, commentController.createComment);
+// router.put('/:id', validateComment, handleValidation, commentController.updateComment);
+// router.delete('/:id', commentController.deleteComment);
 
-module.exports = router;
+// module.exports = router;
 
-// src/routes/ai.routes.js
-const express = require('express');
-const router = express.Router();
-const aiController = require('../controllers/ai.controller');
-const { validateAI } = require('../validators/ai.validator');
-const { authenticate } = require('../middlewares/auth.middleware');
-const { handleValidation } = require('../middlewares/validation.middleware');
+// // src/routes/ai.routes.js
+// const express = require('express');
+// const router = express.Router();
+// const aiController = require('../controllers/ai.controller');
+// const { validateAI } = require('../validators/ai.validator');
+// const { authenticate } = require('../middlewares/auth.middleware');
+// const { handleValidation } = require('../middlewares/validation.middleware');
 
-router.use(authenticate);
+// router.use(authenticate);
 
-router.post('/generate-tasks', validateAI.generateTasks, handleValidation, aiController.generateTasks);
-router.post('/analyze-project', validateAI.analyzeProject, handleValidation, aiController.analyzeProject);
-router.post('/estimate-time', validateAI.estimateTime, handleValidation, aiController.estimateTime);
-router.post('/generate-summary', validateAI.generateSummary, handleValidation, aiController.generateSummary);
-router.post('/suggest-improvements', validateAI.suggestImprovements, handleValidation, aiController.suggestImprovements);
+// router.post('/generate-tasks', validateAI.generateTasks, handleValidation, aiController.generateTasks);
+// router.post('/analyze-project', validateAI.analyzeProject, handleValidation, aiController.analyzeProject);
+// router.post('/estimate-time', validateAI.estimateTime, handleValidation, aiController.estimateTime);
+// router.post('/generate-summary', validateAI.generateSummary, handleValidation, aiController.generateSummary);
+// router.post('/suggest-improvements', validateAI.suggestImprovements, handleValidation, aiController.suggestImprovements);
 
-module.exports = router;
+// module.exports = router;
 
-// ===================================
-// 5. VALIDADORES
-// ===================================
+// // ===================================
+// // 5. VALIDADORES
+// // ===================================
 
-// src/validators/task.validator.js
-const { body } = require('express-validator');
+// // src/validators/task.validator.js
+// const { body } = require('express-validator');
 
-const validateTask = [
-  body('title')
-    .trim()
-    .isLength({ min: 3, max: 100 })
-    .withMessage('Título debe tener entre 3 y 100 caracteres'),
+// const validateTask = [
+//   body('title')
+//     .trim()
+//     .isLength({ min: 3, max: 100 })
+//     .withMessage('Título debe tener entre 3 y 100 caracteres'),
 
-  body('description')
-    .trim()
-    .isLength({ min: 10, max: 1000 })
-    .withMessage('Descripción debe tener entre 10 y 1000 caracteres'),
+//   body('description')
+//     .trim()
+//     .isLength({ min: 10, max: 1000 })
+//     .withMessage('Descripción debe tener entre 10 y 1000 caracteres'),
 
-  body('assignedTo')
-    .optional()
-    .isMongoId()
-    .withMessage('ID de usuario asignado inválido'),
+//   body('assignedTo')
+//     .optional()
+//     .isMongoId()
+//     .withMessage('ID de usuario asignado inválido'),
 
-  body('priority')
-    .optional()
-    .isIn(['Low', 'Medium', 'High', 'Critical'])
-    .withMessage('Prioridad inválida'),
+//   body('priority')
+//     .optional()
+//     .isIn(['Low', 'Medium', 'High', 'Critical'])
+//     .withMessage('Prioridad inválida'),
 
-  body('estimatedHours')
-    .optional()
-    .isFloat({ min: 0 })
-    .withMessage('Horas estimadas deben ser positivas'),
+//   body('estimatedHours')
+//     .optional()
+//     .isFloat({ min: 0 })
+//     .withMessage('Horas estimadas deben ser positivas'),
 
-  body('dueDate')
-    .isISO8601()
-    .withMessage('Fecha límite inválida'),
+//   body('dueDate')
+//     .isISO8601()
+//     .withMessage('Fecha límite inválida'),
 
-  body('tags')
-    .optional()
-    .isArray()
-    .withMessage('Tags deben ser un array')
-];
+//   body('tags')
+//     .optional()
+//     .isArray()
+//     .withMessage('Tags deben ser un array')
+// ];
 
-const validateTaskStatus = [
-  body('status')
-    .isMongoId()
-    .withMessage('ID de estado inválido')
-];
+// const validateTaskStatus = [
+//   body('status')
+//     .isMongoId()
+//     .withMessage('ID de estado inválido')
+// ];
 
-const validateAssign = [
-  body('user')
-    .isMongoId()
-    .withMessage('ID de usuario inválido')
-];
+// const validateAssign = [
+//   body('user')
+//     .isMongoId()
+//     .withMessage('ID de usuario inválido')
+// ];
 
-module.exports = { validateTask, validateTaskStatus, validateAssign };
+// module.exports = { validateTask, validateTaskStatus, validateAssign };
 
-// src/validators/comment.validator.js
-const { body } = require('express-validator');
+// // src/validators/comment.validator.js
+// const { body } = require('express-validator');
 
-const validateComment = [
-  body('content')
-    .trim()
-    .isLength({ min: 1, max: 2000 })
-    .withMessage('Contenido debe tener entre 1 y 2000 caracteres')
-];
+// const validateComment = [
+//   body('content')
+//     .trim()
+//     .isLength({ min: 1, max: 2000 })
+//     .withMessage('Contenido debe tener entre 1 y 2000 caracteres')
+// ];
 
-module.exports = { validateComment };
+// module.exports = { validateComment };
 
-// src/validators/ai.validator.js
-const { body } = require('express-validator');
+// // src/validators/ai.validator.js
+// const { body } = require('express-validator');
 
-const generateTasks = [
-  body('projectDescription')
-    .trim()
-    .isLength({ min: 20, max: 2000 })
-    .withMessage('Descripción del proyecto: 20-2000 caracteres'),
+// const generateTasks = [
+//   body('projectDescription')
+//     .trim()
+//     .isLength({ min: 20, max: 2000 })
+//     .withMessage('Descripción del proyecto: 20-2000 caracteres'),
 
-  body('projectId')
-    .isMongoId()
-    .withMessage('ID de proyecto inválido')
-];
+//   body('projectId')
+//     .isMongoId()
+//     .withMessage('ID de proyecto inválido')
+// ];
 
-const analyzeProject = [
-  body('projectId')
-    .isMongoId()
-    .withMessage('ID de proyecto inválido')
-];
+// const analyzeProject = [
+//   body('projectId')
+//     .isMongoId()
+//     .withMessage('ID de proyecto inválido')
+// ];
 
-const estimateTime = [
-  body('taskDescription')
-    .trim()
-    .isLength({ min: 10, max: 1000 })
-    .withMessage('Descripción de tarea: 10-1000 caracteres'),
+// const estimateTime = [
+//   body('taskDescription')
+//     .trim()
+//     .isLength({ min: 10, max: 1000 })
+//     .withMessage('Descripción de tarea: 10-1000 caracteres'),
 
-  body('complexity')
-    .optional()
-    .isIn(['Low', 'Medium', 'High'])
-    .withMessage('Complejidad inválida')
-];
+//   body('complexity')
+//     .optional()
+//     .isIn(['Low', 'Medium', 'High'])
+//     .withMessage('Complejidad inválida')
+// ];
 
-const generateSummary = [
-  body('projectId')
-    .isMongoId()
-    .withMessage('ID de proyecto inválido')
-];
+// const generateSummary = [
+//   body('projectId')
+//     .isMongoId()
+//     .withMessage('ID de proyecto inválido')
+// ];
 
-const suggestImprovements = [
-  body('projectId')
-    .isMongoId()
-    .withMessage('ID de proyecto inválido')
-];
+// const suggestImprovements = [
+//   body('projectId')
+//     .isMongoId()
+//     .withMessage('ID de proyecto inválido')
+// ];
 
-module.exports = {
-  validateAI: {
-    generateTasks,
-    analyzeProject,
-    estimateTime,
-    generateSummary,
-    suggestImprovements
-  }
-};
+// module.exports = {
+//   validateAI: {
+//     generateTasks,
+//     analyzeProject,
+//     estimateTime,
+//     generateSummary,
+//     suggestImprovements
+//   }
+// };
 
-// ===================================
-// 6. SCRIPTS DE TESTING
-// ===================================
+// // ===================================
+// // 6. SCRIPTS DE TESTING
+// // ===================================
 
-// scripts/test-deepseek.js
-const axios = require('axios');
-require('dotenv').config();
+// // scripts/test-deepseek.js
+// const axios = require('axios');
+// require('dotenv').config();
 
-async function testDeepSeek() {
-  try {
-    console.log('🤖 Probando conexión con DeepSeek...');
+// async function testDeepSeek() {
+//   try {
+//     console.log('🤖 Probando conexión con DeepSeek...');
     
-    if (!process.env.DEEPSEEK_API_KEY) {
-      console.error('❌ DEEPSEEK_API_KEY no encontrada en .env');
-      return;
-    }
+//     if (!process.env.DEEPSEEK_API_KEY) {
+//       console.error('❌ DEEPSEEK_API_KEY no encontrada en .env');
+//       return;
+//     }
 
-    const response = await axios.post('https://api.deepseek.com/v1/chat/completions', {
-      model: 'deepseek-chat',
-      messages: [
-        {
-          role: 'user',
-          content: 'Responde solo: "DeepSeek funcionando correctamente"'
-        }
-      ],
-      max_tokens: 50
-    }, {
-      headers: {
-        'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`,
-        'Content-Type': 'application/json'
-      }
-    });
+//     const response = await axios.post('https://api.deepseek.com/v1/chat/completions', {
+//       model: 'deepseek-chat',
+//       messages: [
+//         {
+//           role: 'user',
+//           content: 'Responde solo: "DeepSeek funcionando correctamente"'
+//         }
+//       ],
+//       max_tokens: 50
+//     }, {
+//       headers: {
+//         'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`,
+//         'Content-Type': 'application/json'
+//       }
+//     });
 
-    console.log('✅ Respuesta:', response.data.choices[0].message.content);
-    console.log('🎉 DeepSeek AI configurado correctamente!');
-  } catch (error) {
-    console.error('❌ Error DeepSeek:', error.response?.data || error.message);
-    console.log('💡 Verifica tu DEEPSEEK_API_KEY en .env');
-  }
-}
+//     console.log('✅ Respuesta:', response.data.choices[0].message.content);
+//     console.log('🎉 DeepSeek AI configurado correctamente!');
+//   } catch (error) {
+//     console.error('❌ Error DeepSeek:', error.response?.data || error.message);
+//     console.log('💡 Verifica tu DEEPSEEK_API_KEY en .env');
+//   }
+// }
 
 testDeepSeek();
 
