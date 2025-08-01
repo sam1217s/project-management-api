@@ -1,0 +1,675 @@
+// ===================================
+// FRANKLIN PEÑA - CÓDIGO COMPLETO OPTIMIZADO
+// Módulo: Categorías, Estados y Upload
+// ===================================
+
+// src/models/Category.model.js
+const mongoose = require('mongoose');
+
+const categorySchema = new mongoose.Schema({
+  name: {
+    type: String,
+    required: true,
+    unique: true,
+    trim: true,
+    maxlength: 50
+  },
+  description: {
+    type: String,
+    required: true,
+    maxlength: 200
+  },
+  isActive: {
+    type: Boolean,
+    default: true
+  },
+  createdBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  }
+}, {
+  timestamps: true
+});
+
+// Índices
+categorySchema.index({ name: 1 });
+categorySchema.index({ isActive: 1 });
+
+module.exports = mongoose.model('Category', categorySchema);
+
+// ===================================
+// src/models/State.model.js
+// ===================================
+const mongoose = require('mongoose');
+
+const stateSchema = new mongoose.Schema({
+  name: {
+    type: String,
+    required: true,
+    trim: true,
+    maxlength: 50
+  },
+  description: {
+    type: String,
+    maxlength: 200
+  },
+  type: {
+    type: String,
+    required: true,
+    enum: ['Project', 'Task']
+  },
+  isActive: {
+    type: Boolean,
+    default: true
+  }
+}, {
+  timestamps: true
+});
+
+// Índices
+stateSchema.index({ type: 1, isActive: 1 });
+
+module.exports = mongoose.model('State', stateSchema);
+
+// ===================================
+// src/controllers/category.controller.js
+// ===================================
+const Category = require('../models/Category.model');
+const { sendResponse, sendError } = require('../utils/response.util');
+
+class CategoryController {
+  // Listar categorías
+  async getCategories(req, res) {
+    try {
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 10;
+      const skip = (page - 1) * limit;
+
+      const categories = await Category.find({ isActive: true })
+        .populate('createdBy', 'firstName lastName')
+        .skip(skip)
+        .limit(limit)
+        .sort({ createdAt: -1 });
+
+      const total = await Category.countDocuments({ isActive: true });
+
+      sendResponse(res, 200, true, 'Categorías obtenidas', {
+        categories,
+        pagination: {
+          page,
+          limit,
+          total,
+          pages: Math.ceil(total / limit)
+        }
+      });
+    } catch (error) {
+      console.error('Error categorías:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Crear categoría
+  async createCategory(req, res) {
+    try {
+      const { name, description } = req.body;
+
+      const category = await Category.create({
+        name,
+        description,
+        createdBy: req.user.userId
+      });
+
+      await category.populate('createdBy', 'firstName lastName');
+
+      sendResponse(res, 201, true, 'Categoría creada', { category });
+    } catch (error) {
+      console.error('Error crear categoría:', error);
+      if (error.code === 11000) {
+        return sendError(res, 400, 'La categoría ya existe');
+      }
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Actualizar categoría
+  async updateCategory(req, res) {
+    try {
+      const { id } = req.params;
+      const { name, description } = req.body;
+
+      const category = await Category.findById(id);
+      if (!category || !category.isActive) {
+        return sendError(res, 404, 'Categoría no encontrada');
+      }
+
+      const updatedCategory = await Category.findByIdAndUpdate(
+        id,
+        { name, description },
+        { new: true, runValidators: true }
+      ).populate('createdBy', 'firstName lastName');
+
+      sendResponse(res, 200, true, 'Categoría actualizada', { category: updatedCategory });
+    } catch (error) {
+      console.error('Error actualizar categoría:', error);
+      if (error.code === 11000) {
+        return sendError(res, 400, 'El nombre ya existe');
+      }
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Eliminar categoría
+  async deleteCategory(req, res) {
+    try {
+      const { id } = req.params;
+
+      const category = await Category.findById(id);
+      if (!category || !category.isActive) {
+        return sendError(res, 404, 'Categoría no encontrada');
+      }
+
+      await Category.findByIdAndUpdate(id, { isActive: false });
+
+      sendResponse(res, 200, true, 'Categoría eliminada');
+    } catch (error) {
+      console.error('Error eliminar categoría:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+}
+
+module.exports = new CategoryController();
+
+// ===================================
+// src/controllers/state.controller.js
+// ===================================
+const State = require('../models/State.model');
+const { sendResponse, sendError } = require('../utils/response.util');
+
+class StateController {
+  // Estados para proyectos
+  async getProjectStates(req, res) {
+    try {
+      const states = await State.find({ 
+        type: 'Project', 
+        isActive: true 
+      }).sort({ createdAt: 1 });
+
+      sendResponse(res, 200, true, 'Estados de proyecto obtenidos', { states });
+    } catch (error) {
+      console.error('Error estados proyecto:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Estados para tareas
+  async getTaskStates(req, res) {
+    try {
+      const states = await State.find({ 
+        type: 'Task', 
+        isActive: true 
+      }).sort({ createdAt: 1 });
+
+      sendResponse(res, 200, true, 'Estados de tarea obtenidos', { states });
+    } catch (error) {
+      console.error('Error estados tarea:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Crear estado (Admin)
+  async createState(req, res) {
+    try {
+      const { name, description, type } = req.body;
+
+      const state = await State.create({ name, description, type });
+
+      sendResponse(res, 201, true, 'Estado creado', { state });
+    } catch (error) {
+      console.error('Error crear estado:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Actualizar estado (Admin)
+  async updateState(req, res) {
+    try {
+      const { id } = req.params;
+      const { name, description, type } = req.body;
+
+      const state = await State.findById(id);
+      if (!state || !state.isActive) {
+        return sendError(res, 404, 'Estado no encontrado');
+      }
+
+      const updatedState = await State.findByIdAndUpdate(
+        id,
+        { name, description, type },
+        { new: true, runValidators: true }
+      );
+
+      sendResponse(res, 200, true, 'Estado actualizado', { state: updatedState });
+    } catch (error) {
+      console.error('Error actualizar estado:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+}
+
+module.exports = new StateController();
+
+// ===================================
+// src/controllers/upload.controller.js
+// ===================================
+const path = require('path');
+const fs = require('fs').promises;
+const { sendResponse, sendError } = require('../utils/response.util');
+
+class UploadController {
+  // Subir avatar
+  async uploadAvatar(req, res) {
+    try {
+      if (!req.file) {
+        return sendError(res, 400, 'No se subió archivo');
+      }
+
+      const { filename, mimetype, size } = req.file;
+      const fileUrl = `/uploads/avatars/${filename}`;
+
+      sendResponse(res, 200, true, 'Avatar subido', {
+        file: {
+          filename,
+          url: fileUrl,
+          mimetype,
+          size
+        }
+      });
+    } catch (error) {
+      console.error('Error subir avatar:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Subir documento
+  async uploadDocument(req, res) {
+    try {
+      if (!req.file) {
+        return sendError(res, 400, 'No se subió archivo');
+      }
+
+      const { filename, originalname, mimetype, size } = req.file;
+      const fileUrl = `/uploads/documents/${filename}`;
+
+      sendResponse(res, 200, true, 'Documento subido', {
+        file: {
+          filename,
+          originalname,
+          url: fileUrl,
+          mimetype,
+          size
+        }
+      });
+    } catch (error) {
+      console.error('Error subir documento:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Eliminar archivo
+  async deleteFile(req, res) {
+    try {
+      const { filename } = req.params;
+      const { type } = req.query;
+
+      const uploadPath = type === 'avatar' ? 'avatars' : 'documents';
+      const filePath = path.join(__dirname, '../../uploads', uploadPath, filename);
+
+      try {
+        await fs.access(filePath);
+        await fs.unlink(filePath);
+        sendResponse(res, 200, true, 'Archivo eliminado');
+      } catch (fileError) {
+        return sendError(res, 404, 'Archivo no encontrado');
+      }
+    } catch (error) {
+      console.error('Error eliminar archivo:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+}
+
+module.exports = new UploadController();
+
+// ===================================
+// src/routes/category.routes.js
+// ===================================
+const express = require('express');
+const router = express.Router();
+const categoryController = require('../controllers/category.controller');
+const { validateCategory } = require('../validators/category.validator');
+const { authenticate } = require('../middlewares/auth.middleware');
+const { handleValidation } = require('../middlewares/validation.middleware');
+
+router.use(authenticate);
+
+router.get('/', categoryController.getCategories);
+router.post('/', validateCategory, handleValidation, categoryController.createCategory);
+router.put('/:id', validateCategory, handleValidation, categoryController.updateCategory);
+router.delete('/:id', categoryController.deleteCategory);
+
+module.exports = router;
+
+// ===================================
+// src/routes/state.routes.js  
+// ===================================
+const express = require('express');
+const router = express.Router();
+const stateController = require('../controllers/state.controller');
+const { validateState } = require('../validators/state.validator');
+const { authenticate } = require('../middlewares/auth.middleware');
+const { authorize } = require('../middlewares/role.middleware');
+const { handleValidation } = require('../middlewares/validation.middleware');
+
+router.use(authenticate);
+
+router.get('/projects', stateController.getProjectStates);
+router.get('/tasks', stateController.getTaskStates);
+router.post('/', authorize(['Admin']), validateState, handleValidation, stateController.createState);
+router.put('/:id', authorize(['Admin']), validateState, handleValidation, stateController.updateState);
+
+module.exports = router;
+
+// ===================================
+// src/routes/upload.routes.js
+// ===================================
+const express = require('express');
+const router = express.Router();
+const uploadController = require('../controllers/upload.controller');
+const { authenticate } = require('../middlewares/auth.middleware');
+const { uploadAvatar, uploadDocument } = require('../middlewares/upload.middleware');
+
+router.use(authenticate);
+
+router.post('/avatar', uploadAvatar, uploadController.uploadAvatar);
+router.post('/document', uploadDocument, uploadController.uploadDocument);
+router.delete('/:filename', uploadController.deleteFile);
+
+module.exports = router;
+
+// ===================================
+// src/middlewares/upload.middleware.js
+// ===================================
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+const { sendError } = require('../utils/response.util');
+
+// Crear directorios
+const createDirs = () => {
+  const dirs = ['uploads/avatars', 'uploads/documents'];
+  dirs.forEach(dir => {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+  });
+};
+
+createDirs();
+
+// Configuración de storage
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadPath = req.route.path.includes('avatar') 
+      ? 'uploads/avatars' 
+      : 'uploads/documents';
+    cb(null, uploadPath);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const extension = path.extname(file.originalname);
+    cb(null, file.fieldname + '-' + uniqueSuffix + extension);
+  }
+});
+
+// Filtro de archivos
+const fileFilter = (req, file, cb) => {
+  const allowedTypes = {
+    avatar: ['image/jpeg', 'image/png', 'image/gif'],
+    document: ['image/jpeg', 'image/png', 'image/gif', 'application/pdf']
+  };
+
+  const type = req.route.path.includes('avatar') ? 'avatar' : 'document';
+  
+  if (allowedTypes[type].includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Tipo de archivo no permitido'), false);
+  }
+};
+
+// Configuración multer
+const upload = multer({
+  storage,
+  fileFilter,
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB
+  }
+});
+
+// Middlewares específicos
+const uploadAvatar = upload.single('avatar');
+const uploadDocument = upload.single('document');
+
+module.exports = { uploadAvatar, uploadDocument };
+
+// ===================================
+// src/validators/category.validator.js
+// ===================================
+const { body } = require('express-validator');
+
+const validateCategory = [
+  body('name')
+    .trim()
+    .isLength({ min: 3, max: 50 })
+    .withMessage('Nombre: 3-50 caracteres'),
+
+  body('description')
+    .trim()
+    .isLength({ min: 10, max: 200 })
+    .withMessage('Descripción: 10-200 caracteres')
+];
+
+module.exports = { validateCategory };
+
+// ===================================
+// src/validators/state.validator.js
+// ===================================
+const { body } = require('express-validator');
+
+const validateState = [
+  body('name')
+    .trim()
+    .isLength({ min: 3, max: 50 })
+    .withMessage('Nombre: 3-50 caracteres'),
+
+  body('description')
+    .optional()
+    .trim()
+    .isLength({ max: 200 })
+    .withMessage('Descripción: máximo 200 caracteres'),
+
+  body('type')
+    .isIn(['Project', 'Task'])
+    .withMessage('Tipo debe ser Project o Task')
+];
+
+module.exports = { validateState };
+
+// ===================================
+// scripts/init-default-data.js
+// ===================================
+const mongoose = require('mongoose');
+const Role = require('../src/models/Role.model');
+const State = require('../src/models/State.model');
+const Category = require('../src/models/Category.model');
+const User = require('../src/models/User.model');
+require('dotenv').config();
+
+const initDefaultData = async () => {
+  try {
+    await mongoose.connect(process.env.MONGODB_URI);
+    console.log('Conectado a MongoDB');
+
+    // Crear roles por defecto
+    const roles = [
+      { name: 'Admin', description: 'Administrador del sistema' },
+      { name: 'Project Manager', description: 'Gestor de proyectos' },
+      { name: 'Developer', description: 'Desarrollador' },
+      { name: 'Viewer', description: 'Solo lectura' }
+    ];
+
+    for (const roleData of roles) {
+      const existingRole = await Role.findOne({ name: roleData.name });
+      if (!existingRole) {
+        await Role.create(roleData);
+        console.log(`✅ Rol creado: ${roleData.name}`);
+      }
+    }
+
+    // Crear estados por defecto para proyectos
+    const projectStates = [
+      { name: 'Planificación', type: 'Project', description: 'Proyecto en planificación' },
+      { name: 'En Progreso', type: 'Project', description: 'Proyecto en desarrollo' },
+      { name: 'En Revisión', type: 'Project', description: 'Proyecto en revisión' },
+      { name: 'Completado', type: 'Project', description: 'Proyecto completado' },
+      { name: 'Cancelado', type: 'Project', description: 'Proyecto cancelado' }
+    ];
+
+    for (const stateData of projectStates) {
+      const existingState = await State.findOne({ 
+        name: stateData.name, 
+        type: stateData.type 
+      });
+      if (!existingState) {
+        await State.create(stateData);
+        console.log(`✅ Estado de proyecto creado: ${stateData.name}`);
+      }
+    }
+
+    // Crear estados por defecto para tareas
+    const taskStates = [
+      { name: 'Pendiente', type: 'Task', description: 'Tarea pendiente' },
+      { name: 'En Progreso', type: 'Task', description: 'Tarea en progreso' },
+      { name: 'En Revisión', type: 'Task', description: 'Tarea en revisión' },
+      { name: 'Completada', type: 'Task', description: 'Tarea completada' },
+      { name: 'Bloqueada', type: 'Task', description: 'Tarea bloqueada' }
+    ];
+
+    for (const stateData of taskStates) {
+      const existingState = await State.findOne({ 
+        name: stateData.name, 
+        type: stateData.type 
+      });
+      if (!existingState) {
+        await State.create(stateData);
+        console.log(`✅ Estado de tarea creado: ${stateData.name}`);
+      }
+    }
+
+    // Crear usuario admin por defecto
+    const adminRole = await Role.findOne({ name: 'Admin' });
+    const existingAdmin = await User.findOne({ email: 'admin@test.com' });
+    
+    if (!existingAdmin && adminRole) {
+      await User.create({
+        firstName: 'Admin',
+        lastName: 'User',
+        email: 'admin@test.com',
+        password: 'admin123',
+        globalRole: adminRole._id,
+        isEmailVerified: true
+      });
+      console.log('✅ Usuario admin creado (admin@test.com / admin123)');
+    }
+
+    console.log('🎉 Datos por defecto inicializados');
+    process.exit(0);
+  } catch (error) {
+    console.error('❌ Error inicializando datos:', error);
+    process.exit(1);
+  }
+};
+
+if (require.main === module) {
+  initDefaultData();
+}
+
+module.exports = initDefaultData;
+
+// ===================================
+// Instrucciones de uso para Franklin
+// ===================================
+
+/*
+INSTRUCCIONES PARA FRANKLIN PEÑA:
+
+1. SETUP INICIAL:
+   - Esperar que Samuel complete la base (server.js, auth, users)
+   - Instalar dependencia: npm install multer
+   - Crear carpetas: mkdir -p uploads/avatars uploads/documents
+
+2. ARCHIVOS A CREAR:
+   - Todos los archivos mostrados arriba
+   - Ejecutar: node scripts/init-default-data.js (para datos iniciales)
+
+3. PRUEBAS:
+   - GET /api/categories (listar categorías)
+   - POST /api/categories (crear categoría)
+   - GET /api/states/projects (estados de proyecto)
+   - GET /api/states/tasks (estados de tarea)
+   - POST /api/upload/avatar (subir avatar)
+   - POST /api/upload/document (subir documento)
+
+4. ENDPOINTS PRINCIPALES:
+   Categories:
+   - GET /api/categories
+   - POST /api/categories
+   - PUT /api/categories/:id
+   - DELETE /api/categories/:id
+
+   States:
+   - GET /api/states/projects
+   - GET /api/states/tasks
+   - POST /api/states (Admin)
+   - PUT /api/states/:id (Admin)
+
+   Upload:
+   - POST /api/upload/avatar
+   - POST /api/upload/document
+   - DELETE /api/upload/:filename
+
+5. DEPENDENCIAS:
+   - multer (para upload)
+   - express-validator (para validaciones)
+
+6. VALIDACIONES IMPLEMENTADAS:
+   - Categorías: nombre y descripción obligatorios
+   - Estados: nombre y tipo obligatorios
+   - Upload: tipo de archivo y tamaño
+
+7. NOTAS IMPORTANTES:
+   - Los uploads se guardan en uploads/avatars y uploads/documents
+   - Las categorías requieren usuario autenticado para crearlas
+   - Solo Admin puede crear/editar estados
+   - Archivos permitidos: imágenes (avatar) y PDF (documentos)
+   - Tamaño máximo: 5MB
+
+8. ORDEN DE TRABAJO:
+   Semana 2: Después que Samuel complete autenticación
+   - Día 1-2: Modelos y controladores
+   - Día 3-4: Upload y middleware
+   - Día 5: Script de inicialización y pruebas
+
+¡LISTO PARA DESARROLLAR! 🚀
+*/
