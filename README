@@ -1,0 +1,146 @@
+# 📁 Estructura Completa del Proyecto
+
+## 🗂️ Árbol de Directorios Completo
+
+```
+project-management-api/
+├── 📁 src/
+│   ├── 📁 config/
+│   │   ├── database.js                    # 👨‍💻 Samuel
+│   │   ├── jwt.js                         # 👨‍💻 Samuel
+│   │   └── multer.js                      # 👨‍💻 Franklin
+│   │
+│   ├── 📁 controllers/
+│   │   ├── auth.controller.js             # 👨‍💻 Samuel
+│   │   ├── user.controller.js             # 👨‍💻 Samuel
+│   │   ├── role.controller.js             # 👨‍💻 Samuel
+│   │   ├── category.controller.js         # 👨‍💻 Franklin
+│   │   ├── state.controller.js            # 👨‍💻 Franklin
+│   │   ├── upload.controller.js           # 👨‍💻 Franklin
+│   │   ├── project.controller.js          # 👩‍💻 Mariana
+│   │   ├── task.controller.js             # 👩‍💻 Mariam
+│   │   ├── comment.controller.js          # 👩‍💻 Mariam
+│   │   └── ai.controller.js               # 👩‍💻 Mariam
+│   │
+│   ├── 📁 middlewares/
+│   │   ├── auth.middleware.js             # 👨‍💻 Samuel
+│   │   ├── role.middleware.js             # 👨‍💻 Samuel
+│   │   ├── validation.middleware.js       # 👨‍💻 Franklin
+│   │   ├── error.middleware.js            # 👨‍💻 Franklin
+│   │   └── upload.middleware.js           # 👨‍💻 Franklin
+│   │
+│   ├── 📁 models/
+│   │   ├── User.model.js                  # 👨‍💻 Samuel
+│   │   ├── Role.model.js                  # 👨‍💻 Samuel
+│   │   ├── Category.model.js              # 👨‍💻 Franklin
+│   │   ├── State.model.js                 # 👨‍💻 Franklin
+│   │   ├── Project.model.js               # 👩‍💻 Mariana
+│   │   ├── Task.model.js                  # 👩‍💻 Mariam
+│   │   └── Comment.model.js               # 👩‍💻 Mariam
+│   │
+│   ├── 📁 routes/
+│   │   ├── auth.routes.js                 # 👨‍💻 Samuel
+│   │   ├── user.routes.js                 # 👨‍💻 Samuel
+│   │   ├── role.routes.js                 # 👨‍💻 Samuel
+│   │   ├── category.routes.js             # 👨‍💻 Franklin
+│   │   ├── state.routes.js                # 👨‍💻 Franklin
+│   │   ├── upload.routes.js               # 👨‍💻 Franklin
+│   │   ├── project.routes.js              # 👩‍💻 Mariana
+│   │   ├── task.routes.js                 # 👩‍💻 Mariam
+│   │   ├── comment.routes.js              # 👩‍💻 Mariam
+│   │   └── ai.routes.js                   # 👩‍💻 Mariam
+│   │
+│   ├── 📁 services/
+│   │   ├── auth.service.js                # 👨‍💻 Samuel
+│   │   ├── email.service.js               # 👨‍💻 Samuel
+│   │   ├── upload.service.js              # 👨‍💻 Franklin
+│   │   └── ai.service.js                  # 👩‍💻 Mariam
+│   │
+│   ├── 📁 utils/
+│   │   ├── response.util.js               # 👨‍💻 Franklin
+│   │   ├── encryption.util.js             # 👨‍💻 Samuel
+│   │   ├── validation.util.js             # 👨‍💻 Franklin
+│   │   └── constants.js                   # 👨‍💻 Franklin
+│   │
+│   ├── 📁 validators/
+│   │   ├── auth.validator.js              # 👨‍💻 Samuel
+│   │   ├── user.validator.js              # 👨‍💻 Samuel
+│   │   ├── role.validator.js              # 👨‍💻 Samuel
+│   │   ├── category.validator.js          # 👨‍💻 Franklin
+│   │   ├── state.validator.js             # 👨‍💻 Franklin
+│   │   ├── project.validator.js           # 👩‍💻 Mariana
+│   │   ├── task.validator.js              # 👩‍💻 Mariam
+│   │   ├── comment.validator.js           # 👩‍💻 Mariam
+│   │   └── ai.validator.js                # 👩‍💻 Mariam
+│   │
+│   └── app.js                             # 👨‍💻 Samuel
+│
+├── 📁 uploads/
+│   ├── 📁 avatars/                        # 👨‍💻 Franklin
+│   └── 📁 documents/                      # 👨‍💻 Franklin
+│
+├── 📁 tests/
+│   ├── auth.test.js                       # 👨‍💻 Samuel
+│   ├── users.test.js                      # 👨‍💻 Samuel
+│   ├── categories.test.js                 # 👨‍💻 Franklin
+│   ├── states.test.js                     # 👨‍💻 Franklin
+│   ├── projects.test.js                   # 👩‍💻 Mariana
+│   ├── tasks.test.js                      # 👩‍💻 Mariam
+│   ├── comments.test.js                   # 👩‍💻 Mariam
+│   └── ai.test.js                         # 👩‍💻 Mariam
+│
+├── 📁 scripts/
+│   ├── init-default-data.js               # 👨‍💻 Franklin
+│   ├── seed-users.js                      # 👨‍💻 Samuel
+│   ├── seed-projects.js                   # 👩‍💻 Mariana
+│   └── seed-tasks.js                      # 👩‍💻 Mariam
+│
+├── 📁 docs/
+│   ├── api.md                             # 👥 Todos
+│   ├── setup.md                           # 👨‍💻 Samuel
+│   └── deployment.md                      # 👥 Todos
+│
+├── server.js                              # 👨‍💻 Samuel
+├── package.json                           # 👨‍💻 Samuel
+├── .env.example                           # 👨‍💻 Samuel
+├── .gitignore                             # 👨‍💻 Samuel
+├── README.md                              # 👥 Todos
+├── jest.config.js                         # 👨‍💻 Samuel
+└── nodemon.json                           # 👨‍💻 Samuel
+```
+
+## 📊 Resumen por Desarrollador
+
+| Desarrollador | Archivos | Módulos | Responsabilidad |
+|---------------|----------|---------|-----------------|
+| **👨‍💻 Samuel** | 15 archivos | Auth, Users, Roles | Setup + Autenticación |
+| **👨‍💻 Franklin** | 12 archivos | Categories, States, Upload | Infraestructura base |
+| **👩‍💻 Mariana** | 5 archivos | Projects | Gestión de proyectos |
+| **👩‍💻 Mariam** | 10 archivos | Tasks, Comments, AI | Funcionalidades avanzadas |
+
+## 🔗 Dependencias entre Módulos
+
+```
+Samuel (Base) 
+    ↓
+Franklin (Infraestructura)
+    ↓
+Mariana (Proyectos)
+    ↓
+Mariam (Tareas + IA)
+```
+
+## 📦 Archivos Compartidos
+
+### Todos los desarrolladores usan:
+- `src/utils/response.util.js` (Franklin)
+- `src/middlewares/auth.middleware.js` (Samuel)
+- `src/middlewares/validation.middleware.js` (Franklin)
+- `.env` variables
+- `package.json` dependencias
+
+### Configuración común:
+- MongoDB connection (Samuel)
+- JWT configuration (Samuel) 
+- Express setup (Samuel)
+- Error handling (Franklin)
