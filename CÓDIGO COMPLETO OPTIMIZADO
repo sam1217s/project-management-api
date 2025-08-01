@@ -1,0 +1,834 @@
+// ===================================
+// MARIANA GOMEZ - CÓDIGO COMPLETO OPTIMIZADO
+// Módulo: Proyectos
+// ===================================
+
+// src/models/Project.model.js
+const mongoose = require('mongoose');
+
+const projectSchema = new mongoose.Schema({
+  name: {
+    type: String,
+    required: true,
+    trim: true,
+    maxlength: 100
+  },
+  description: {
+    type: String,
+    required: true,
+    maxlength: 1000
+  },
+  category: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Category',
+    required: true
+  },
+  owner: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
+  members: [{
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true
+    },
+    role: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Role',
+      required: true
+    },
+    joinedAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
+  status: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'State',
+    required: true
+  },
+  priority: {
+    type: String,
+    enum: ['Low', 'Medium', 'High', 'Critical'],
+    default: 'Medium'
+  },
+  startDate: {
+    type: Date,
+    required: true
+  },
+  endDate: {
+    type: Date,
+    required: true,
+    validate: {
+      validator: function(endDate) {
+        return endDate > this.startDate;
+      },
+      message: 'La fecha de fin debe ser posterior a la de inicio'
+    }
+  },
+  estimatedHours: {
+    type: Number,
+    min: 0,
+    default: 0
+  },
+  actualHours: {
+    type: Number,
+    min: 0,
+    default: 0
+  },
+  budget: {
+    type: Number,
+    min: 0,
+    default: 0
+  },
+  isActive: {
+    type: Boolean,
+    default: true
+  },
+  tags: [{
+    type: String,
+    trim: true,
+    maxlength: 20
+  }]
+}, {
+  timestamps: true,
+  toJSON: { virtuals: true }
+});
+
+// Virtual para progreso
+projectSchema.virtual('progress').get(function() {
+  // Se calculará basado en tareas completadas
+  return 0;
+});
+
+// Virtual para días restantes
+projectSchema.virtual('daysRemaining').get(function() {
+  const today = new Date();
+  const diffTime = this.endDate - today;
+  return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+});
+
+// Índices
+projectSchema.index({ name: 1 });
+projectSchema.index({ owner: 1 });
+projectSchema.index({ category: 1 });
+projectSchema.index({ status: 1 });
+projectSchema.index({ 'members.user': 1 });
+projectSchema.index({ isActive: 1 });
+
+module.exports = mongoose.model('Project', projectSchema);
+
+// ===================================
+// src/controllers/project.controller.js
+// ===================================
+const Project = require('../models/Project.model');
+const State = require('../models/State.model');
+const Category = require('../models/Category.model');
+const { sendResponse, sendError } = require('../utils/response.util');
+
+class ProjectController {
+  // Listar proyectos del usuario
+  async getProjects(req, res) {
+    try {
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 10;
+      const skip = (page - 1) * limit;
+
+      const filter = {
+        isActive: true,
+        $or: [
+          { owner: req.user.userId },
+          { 'members.user': req.user.userId }
+        ]
+      };
+
+      const projects = await Project.find(filter)
+        .populate('owner', 'firstName lastName email')
+        .populate('category', 'name description')
+        .populate('status', 'name description')
+        .populate('members.user', 'firstName lastName email')
+        .populate('members.role', 'name')
+        .skip(skip)
+        .limit(limit)
+        .sort({ updatedAt: -1 });
+
+      const total = await Project.countDocuments(filter);
+
+      sendResponse(res, 200, true, 'Proyectos obtenidos', {
+        projects,
+        pagination: {
+          page,
+          limit,
+          total,
+          pages: Math.ceil(total / limit)
+        }
+      });
+    } catch (error) {
+      console.error('Error obtener proyectos:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Crear proyecto
+  async createProject(req, res) {
+    try {
+      const {
+        name,
+        description,
+        category,
+        startDate,
+        endDate,
+        estimatedHours,
+        budget,
+        priority,
+        tags
+      } = req.body;
+
+      // Verificar categoría
+      const categoryExists = await Category.findById(category);
+      if (!categoryExists || !categoryExists.isActive) {
+        return sendError(res, 400, 'Categoría no válida');
+      }
+
+      // Estado inicial
+      const initialState = await State.findOne({
+        type: 'Project',
+        name: 'Planificación'
+      });
+
+      if (!initialState) {
+        return sendError(res, 500, 'Estado inicial no encontrado');
+      }
+
+      // Crear proyecto
+      const project = await Project.create({
+        name,
+        description,
+        category,
+        owner: req.user.userId,
+        startDate,
+        endDate,
+        estimatedHours,
+        budget,
+        priority,
+        tags,
+        status: initialState._id,
+        members: [{
+          user: req.user.userId,
+          role: req.user.globalRole._id
+        }]
+      });
+
+      // Poblar relaciones
+      await project.populate([
+        { path: 'owner', select: 'firstName lastName email' },
+        { path: 'category', select: 'name description' },
+        { path: 'status', select: 'name description' },
+        { path: 'members.user', select: 'firstName lastName email' },
+        { path: 'members.role', select: 'name' }
+      ]);
+
+      sendResponse(res, 201, true, 'Proyecto creado', { project });
+    } catch (error) {
+      console.error('Error crear proyecto:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Obtener proyecto específico
+  async getProject(req, res) {
+    try {
+      const { id } = req.params;
+
+      const project = await Project.findById(id)
+        .populate('owner', 'firstName lastName email')
+        .populate('category', 'name description')
+        .populate('status', 'name description')
+        .populate('members.user', 'firstName lastName email')
+        .populate('members.role', 'name');
+
+      if (!project || !project.isActive) {
+        return sendError(res, 404, 'Proyecto no encontrado');
+      }
+
+      // Verificar acceso
+      const hasAccess = project.owner._id.toString() === req.user.userId ||
+                       project.members.some(member => 
+                         member.user._id.toString() === req.user.userId
+                       );
+
+      if (!hasAccess) {
+        return sendError(res, 403, 'Sin acceso al proyecto');
+      }
+
+      sendResponse(res, 200, true, 'Proyecto obtenido', { project });
+    } catch (error) {
+      console.error('Error obtener proyecto:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Actualizar proyecto
+  async updateProject(req, res) {
+    try {
+      const { id } = req.params;
+      const updateData = req.body;
+
+      const project = await Project.findById(id);
+      if (!project || !project.isActive) {
+        return sendError(res, 404, 'Proyecto no encontrado');
+      }
+
+      // Verificar permisos (solo owner)
+      if (project.owner.toString() !== req.user.userId) {
+        return sendError(res, 403, 'Sin permisos para editar');
+      }
+
+      // Validar categoría si se actualiza
+      if (updateData.category) {
+        const categoryExists = await Category.findById(updateData.category);
+        if (!categoryExists || !categoryExists.isActive) {
+          return sendError(res, 400, 'Categoría no válida');
+        }
+      }
+
+      const updatedProject = await Project.findByIdAndUpdate(
+        id,
+        updateData,
+        { new: true, runValidators: true }
+      ).populate([
+        { path: 'owner', select: 'firstName lastName email' },
+        { path: 'category', select: 'name description' },
+        { path: 'status', select: 'name description' },
+        { path: 'members.user', select: 'firstName lastName email' },
+        { path: 'members.role', select: 'name' }
+      ]);
+
+      sendResponse(res, 200, true, 'Proyecto actualizado', { project: updatedProject });
+    } catch (error) {
+      console.error('Error actualizar proyecto:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Eliminar proyecto
+  async deleteProject(req, res) {
+    try {
+      const { id } = req.params;
+
+      const project = await Project.findById(id);
+      if (!project || !project.isActive) {
+        return sendError(res, 404, 'Proyecto no encontrado');
+      }
+
+      // Solo owner puede eliminar
+      if (project.owner.toString() !== req.user.userId) {
+        return sendError(res, 403, 'Sin permisos para eliminar');
+      }
+
+      await Project.findByIdAndUpdate(id, { isActive: false });
+
+      sendResponse(res, 200, true, 'Proyecto eliminado');
+    } catch (error) {
+      console.error('Error eliminar proyecto:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Agregar miembro al proyecto
+  async addMember(req, res) {
+    try {
+      const { id } = req.params;
+      const { user, role } = req.body;
+
+      const project = await Project.findById(id);
+      if (!project || !project.isActive) {
+        return sendError(res, 404, 'Proyecto no encontrado');
+      }
+
+      // Solo owner puede agregar miembros
+      if (project.owner.toString() !== req.user.userId) {
+        return sendError(res, 403, 'Sin permisos para agregar miembros');
+      }
+
+      // Verificar que no sea ya miembro
+      const isAlreadyMember = project.members.some(
+        member => member.user.toString() === user
+      );
+
+      if (isAlreadyMember) {
+        return sendError(res, 400, 'El usuario ya es miembro');
+      }
+
+      // Agregar miembro
+      project.members.push({ user, role });
+      await project.save();
+
+      await project.populate('members.user', 'firstName lastName email');
+      await project.populate('members.role', 'name');
+
+      sendResponse(res, 200, true, 'Miembro agregado', {
+        project: {
+          _id: project._id,
+          name: project.name,
+          members: project.members
+        }
+      });
+    } catch (error) {
+      console.error('Error agregar miembro:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Remover miembro del proyecto
+  async removeMember(req, res) {
+    try {
+      const { id, userId } = req.params;
+
+      const project = await Project.findById(id);
+      if (!project || !project.isActive) {
+        return sendError(res, 404, 'Proyecto no encontrado');
+      }
+
+      // Solo owner puede remover miembros
+      if (project.owner.toString() !== req.user.userId) {
+        return sendError(res, 403, 'Sin permisos para remover miembros');
+      }
+
+      // No se puede remover al owner
+      if (userId === project.owner.toString()) {
+        return sendError(res, 400, 'No se puede remover al propietario');
+      }
+
+      // Remover miembro
+      project.members = project.members.filter(
+        member => member.user.toString() !== userId
+      );
+
+      await project.save();
+
+      sendResponse(res, 200, true, 'Miembro removido');
+    } catch (error) {
+      console.error('Error remover miembro:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Cambiar estado del proyecto
+  async changeStatus(req, res) {
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+
+      const project = await Project.findById(id);
+      if (!project || !project.isActive) {
+        return sendError(res, 404, 'Proyecto no encontrado');
+      }
+
+      // Verificar permisos (owner o miembro con rol PM)
+      const isOwner = project.owner.toString() === req.user.userId;
+      const isPM = project.members.some(member => 
+        member.user.toString() === req.user.userId && 
+        member.role.name === 'Project Manager'
+      );
+
+      if (!isOwner && !isPM) {
+        return sendError(res, 403, 'Sin permisos para cambiar estado');
+      }
+
+      // Verificar estado válido
+      const newStatus = await State.findById(status);
+      if (!newStatus || !newStatus.isActive || newStatus.type !== 'Project') {
+        return sendError(res, 400, 'Estado no válido');
+      }
+
+      project.status = status;
+      await project.save();
+
+      await project.populate('status', 'name description');
+
+      sendResponse(res, 200, true, 'Estado cambiado', {
+        project: {
+          _id: project._id,
+          name: project.name,
+          status: project.status
+        }
+      });
+    } catch (error) {
+      console.error('Error cambiar estado:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+}
+
+module.exports = new ProjectController();
+
+// ===================================
+// src/routes/project.routes.js
+// ===================================
+const express = require('express');
+const router = express.Router();
+const projectController = require('../controllers/project.controller');
+const { validateProject, validateMember, validateStatus } = require('../validators/project.validator');
+const { authenticate } = require('../middlewares/auth.middleware');
+const { authorize } = require('../middlewares/role.middleware');
+const { handleValidation } = require('../middlewares/validation.middleware');
+
+router.use(authenticate);
+
+router.get('/', projectController.getProjects);
+router.post('/', authorize(['Admin', 'Project Manager']), validateProject, handleValidation, projectController.createProject);
+router.get('/:id', projectController.getProject);
+router.put('/:id', validateProject, handleValidation, projectController.updateProject);
+router.delete('/:id', authorize(['Admin']), projectController.deleteProject);
+router.post('/:id/members', validateMember, handleValidation, projectController.addMember);
+router.delete('/:id/members/:userId', projectController.removeMember);
+router.put('/:id/status', validateStatus, handleValidation, projectController.changeStatus);
+
+module.exports = router;
+
+// ===================================
+// src/validators/project.validator.js
+// ===================================
+const { body, param } = require('express-validator');
+
+const validateProject = [
+  body('name')
+    .trim()
+    .isLength({ min: 3, max: 100 })
+    .withMessage('Nombre: 3-100 caracteres'),
+
+  body('description')
+    .trim()
+    .isLength({ min: 10, max: 1000 })
+    .withMessage('Descripción: 10-1000 caracteres'),
+
+  body('category')
+    .isMongoId()
+    .withMessage('ID de categoría inválido'),
+
+  body('startDate')
+    .isISO8601()
+    .withMessage('Fecha de inicio inválida'),
+
+  body('endDate')
+    .isISO8601()
+    .withMessage('Fecha de fin inválida')
+    .custom((endDate, { req }) => {
+      if (new Date(endDate) <= new Date(req.body.startDate)) {
+        throw new Error('Fecha de fin debe ser posterior al inicio');
+      }
+      return true;
+    }),
+
+  body('estimatedHours')
+    .optional()
+    .isFloat({ min: 0 })
+    .withMessage('Horas estimadas deben ser positivas'),
+
+  body('budget')
+    .optional()
+    .isFloat({ min: 0 })
+    .withMessage('Presupuesto debe ser positivo'),
+
+  body('priority')
+    .optional()
+    .isIn(['Low', 'Medium', 'High', 'Critical'])
+    .withMessage('Prioridad inválida'),
+
+  body('tags')
+    .optional()
+    .isArray()
+    .withMessage('Tags deben ser un array'),
+
+  body('tags.*')
+    .optional()
+    .trim()
+    .isLength({ min: 1, max: 20 })
+    .withMessage('Cada tag: 1-20 caracteres')
+];
+
+const validateMember = [
+  body('user')
+    .isMongoId()
+    .withMessage('ID de usuario inválido'),
+
+  body('role')
+    .isMongoId()
+    .withMessage('ID de rol inválido')
+];
+
+const validateStatus = [
+  body('status')
+    .isMongoId()
+    .withMessage('ID de estado inválido')
+];
+
+module.exports = {
+  validateProject,
+  validateMember,
+  validateStatus
+};
+
+// ===================================
+// tests/project.test.js
+// ===================================
+const request = require('supertest');
+const app = require('../server');
+const Project = require('../src/models/Project.model');
+const Category = require('../src/models/Category.model');
+const State = require('../src/models/State.model');
+const User = require('../src/models/User.model');
+const Role = require('../src/models/Role.model');
+
+describe('Project Endpoints', () => {
+  let authToken;
+  let testUser;
+  let testCategory;
+  let testState;
+
+  beforeAll(async () => {
+    // Crear rol PM
+    const pmRole = await Role.create({
+      name: 'Project Manager',
+      description: 'Gestor de proyectos'
+    });
+
+    // Crear usuario
+    testUser = await User.create({
+      firstName: 'Test',
+      lastName: 'PM',
+      email: 'pm@test.com',
+      password: 'password123',
+      globalRole: pmRole._id,
+      isEmailVerified: true
+    });
+
+    // Crear categoría
+    testCategory = await Category.create({
+      name: 'Test Category',
+      description: 'Categoría de prueba',
+      createdBy: testUser._id
+    });
+
+    // Crear estado
+    testState = await State.create({
+      name: 'Planificación',
+      type: 'Project',
+      description: 'Estado inicial'
+    });
+
+    // Login
+    const loginResponse = await request(app)
+      .post('/api/auth/login')
+      .send({
+        email: 'pm@test.com',
+        password: 'password123'
+      });
+
+    authToken = loginResponse.body.data.token;
+  });
+
+  beforeEach(async () => {
+    await Project.deleteMany({});
+  });
+
+  describe('POST /api/projects', () => {
+    test('Should create a new project', async () => {
+      const projectData = {
+        name: 'Test Project',
+        description: 'This is a test project description',
+        category: testCategory._id,
+        startDate: new Date(),
+        endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        estimatedHours: 100,
+        budget: 5000,
+        priority: 'High',
+        tags: ['test', 'demo']
+      };
+
+      const response = await request(app)
+        .post('/api/projects')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send(projectData);
+
+      expect(response.status).toBe(201);
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.project.name).toBe(projectData.name);
+    });
+
+    test('Should not create project with invalid data', async () => {
+      const invalidData = {
+        name: 'A', // Muy corto
+        description: 'Short',
+        category: 'invalid-id'
+      };
+
+      const response = await request(app)
+        .post('/api/projects')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send(invalidData);
+
+      expect(response.status).toBe(400);
+      expect(response.body.success).toBe(false);
+    });
+  });
+
+  describe('GET /api/projects', () => {
+    beforeEach(async () => {
+      await Project.create({
+        name: 'Test Project',
+        description: 'Test project description',
+        category: testCategory._id,
+        owner: testUser._id,
+        status: testState._id,
+        startDate: new Date(),
+        endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        members: [{
+          user: testUser._id,
+          role: testUser.globalRole
+        }]
+      });
+    });
+
+    test('Should get user projects', async () => {
+      const response = await request(app)
+        .get('/api/projects')
+        .set('Authorization', `Bearer ${authToken}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.projects).toHaveLength(1);
+    });
+  });
+
+  describe('POST /api/projects/:id/members', () => {
+    let testProject;
+    let newUser;
+
+    beforeEach(async () => {
+      // Crear nuevo usuario
+      const devRole = await Role.findOne({ name: 'Developer' }) ||
+                     await Role.create({ name: 'Developer', description: 'Dev' });
+
+      newUser = await User.create({
+        firstName: 'New',
+        lastName: 'User',
+        email: 'newuser@test.com',
+        password: 'password123',
+        globalRole: devRole._id
+      });
+
+      // Crear proyecto
+      testProject = await Project.create({
+        name: 'Test Project',
+        description: 'Test description',
+        category: testCategory._id,
+        owner: testUser._id,
+        status: testState._id,
+        startDate: new Date(),
+        endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        members: [{
+          user: testUser._id,
+          role: testUser.globalRole
+        }]
+      });
+    });
+
+    test('Should add member to project', async () => {
+      const response = await request(app)
+        .post(`/api/projects/${testProject._id}/members`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          user: newUser._id,
+          role: newUser.globalRole
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+    });
+  });
+});
+
+// ===================================
+// Instrucciones para Mariana
+// ===================================
+
+/*
+INSTRUCCIONES PARA MARIANA GOMEZ:
+
+1. DEPENDENCIES:
+   - Esperar que Samuel complete auth y Franklin complete categorías/estados
+   - No necesita dependencias adicionales
+
+2. ARCHIVOS A CREAR:
+   - src/models/Project.model.js
+   - src/controllers/project.controller.js
+   - src/routes/project.routes.js
+   - src/validators/project.validator.js
+   - tests/project.test.js
+
+3. ENDPOINTS PRINCIPALES:
+   - GET /api/projects (listar proyectos del usuario)
+   - POST /api/projects (crear proyecto - PM/Admin)
+   - GET /api/projects/:id (obtener proyecto específico)
+   - PUT /api/projects/:id (actualizar proyecto)
+   - DELETE /api/projects/:id (eliminar proyecto - Admin)
+   - POST /api/projects/:id/members (agregar miembro)
+   - DELETE /api/projects/:id/members/:userId (remover miembro)
+   - PUT /api/projects/:id/status (cambiar estado)
+
+4. VALIDACIONES:
+   - Nombre: 3-100 caracteres
+   - Descripción: 10-1000 caracteres
+   - Fechas: endDate > startDate
+   - Categoría: debe existir y estar activa
+   - Budget/hours: números positivos
+
+5. PERMISOS:
+   - Crear: Project Manager o Admin
+   - Ver: Owner o miembro del proyecto
+   - Editar: Owner del proyecto
+   - Eliminar: Solo Admin
+   - Miembros: Solo owner puede agregar/remover
+   - Estado: Owner o PM del proyecto
+
+6. RELACIONES:
+   - owner -> User
+   - category -> Category (Franklin)
+   - status -> State (Franklin)
+   - members.user -> User
+   - members.role -> Role
+
+7. CARACTERÍSTICAS:
+   - Soft delete (isActive: false)
+   - Paginación en listados
+   - Filtros por owner/miembro
+   - Validación de fechas
+   - Sistema de miembros con roles
+
+8. ORDEN DE TRABAJO:
+   Semana 3: Después de Samuel (auth) y Franklin (categories/states)
+   - Día 1-2: Modelo Project completo
+   - Día 3-4: Controlador y rutas principales
+   - Día 4-5: Sistema de miembros y permisos
+   - Día 5: Tests y validaciones
+
+9. NOTAS IMPORTANTES:
+   - El proyecto siempre incluye al owner como miembro
+   - Solo el owner puede agregar/remover miembros
+   - Estado inicial: "Planificación"
+   - Tags son opcionales, máximo 20 caracteres cada uno
+   - Virtual fields: progress, daysRemaining
+
+10. ESTRUCTURA MEMBERS:
+    members: [{
+      user: ObjectId (referencia a User),
+      role: ObjectId (referencia a Role),
+      joinedAt: Date (default: now)
+    }]
+
+¡LISTO PARA DESARROLLAR PROYECTOS! 🚀
+*/
