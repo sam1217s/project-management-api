@@ -1,0 +1,331 @@
+# 👥 Estructuras Individuales por Desarrollador
+
+## 👨‍💻 Samuel Gomez - Setup y Autenticación
+
+### 📁 Estructura de Archivos (15 archivos)
+
+```
+samuel-files/
+├── server.js                             # ⭐ PRINCIPAL - Servidor Express
+├── package.json                          # ⭐ Dependencias del proyecto
+├── .env.example                          # ⭐ Variables de entorno template
+├── .gitignore                            # ⭐ Archivos a ignorar en Git
+├── jest.config.js                        # ⭐ Configuración de tests
+├── nodemon.json                          # ⭐ Configuración de desarrollo
+│
+├── src/
+│   ├── config/
+│   │   ├── database.js                   # Conexión MongoDB
+│   │   └── jwt.js                        # Configuración JWT
+│   │
+│   ├── models/
+│   │   ├── User.model.js                 # ⭐ Modelo Usuario
+│   │   └── Role.model.js                 # ⭐ Modelo Roles
+│   │
+│   ├── controllers/
+│   │   ├── auth.controller.js            # ⭐ Login, register, logout
+│   │   ├── user.controller.js            # ⭐ CRUD usuarios
+│   │   └── role.controller.js            # ⭐ CRUD roles
+│   │
+│   ├── routes/
+│   │   ├── auth.routes.js                # Rutas autenticación
+│   │   ├── user.routes.js                # Rutas usuarios
+│   │   └── role.routes.js                # Rutas roles
+│   │
+│   ├── middlewares/
+│   │   ├── auth.middleware.js            # ⭐ JWT verification
+│   │   └── role.middleware.js            # ⭐ Autorización por roles
+│   │
+│   ├── services/
+│   │   ├── auth.service.js               # Servicios de autenticación
+│   │   └── email.service.js              # Envío de emails
+│   │
+│   ├── utils/
+│   │   └── encryption.util.js            # Utilidades de encriptación
+│   │
+│   └── validators/
+│       ├── auth.validator.js             # Validaciones auth
+│       ├── user.validator.js             # Validaciones users
+│       └── role.validator.js             # Validaciones roles
+│
+├── tests/
+│   ├── auth.test.js                      # Tests autenticación
+│   └── users.test.js                     # Tests usuarios
+│
+└── scripts/
+    └── seed-users.js                     # Crear usuarios de prueba
+```
+
+### 🎯 Endpoints a Desarrollar
+```
+POST /api/auth/register
+POST /api/auth/login
+POST /api/auth/refresh
+POST /api/auth/logout
+POST /api/auth/forgot-password
+POST /api/auth/reset-password
+
+GET  /api/users
+GET  /api/users/profile
+PUT  /api/users/profile
+DELETE /api/users/:id
+PUT  /api/users/:id/role
+
+GET  /api/roles
+POST /api/roles
+PUT  /api/roles/:id
+DELETE /api/roles/:id
+```
+
+---
+
+## 👨‍💻 Franklin Peña - Infraestructura Base
+
+### 📁 Estructura de Archivos (12 archivos)
+
+```
+franklin-files/
+├── uploads/                              # ⭐ Crear carpetas
+│   ├── avatars/                          
+│   └── documents/
+│
+├── src/
+│   ├── config/
+│   │   └── multer.js                     # Configuración upload
+│   │
+│   ├── models/
+│   │   ├── Category.model.js             # ⭐ Modelo Categorías
+│   │   └── State.model.js                # ⭐ Modelo Estados
+│   │
+│   ├── controllers/
+│   │   ├── category.controller.js        # ⭐ CRUD categorías
+│   │   ├── state.controller.js           # ⭐ CRUD estados
+│   │   └── upload.controller.js          # ⭐ Upload archivos
+│   │
+│   ├── routes/
+│   │   ├── category.routes.js            # Rutas categorías
+│   │   ├── state.routes.js               # Rutas estados
+│   │   └── upload.routes.js              # Rutas upload
+│   │
+│   ├── middlewares/
+│   │   ├── validation.middleware.js      # ⭐ Validación express-validator
+│   │   ├── error.middleware.js           # ⭐ Manejo de errores
+│   │   └── upload.middleware.js          # ⭐ Multer middleware
+│   │
+│   ├── services/
+│   │   └── upload.service.js             # Servicios de upload
+│   │
+│   ├── utils/
+│   │   ├── response.util.js              # ⭐ Respuestas estandarizadas
+│   │   ├── validation.util.js            # Utilidades validación
+│   │   └── constants.js                  # ⭐ Constantes del sistema
+│   │
+│   └── validators/
+│       ├── category.validator.js         # Validaciones categorías
+│       └── state.validator.js            # Validaciones estados
+│
+├── tests/
+│   ├── categories.test.js                # Tests categorías
+│   └── states.test.js                    # Tests estados
+│
+└── scripts/
+    └── init-default-data.js              # ⭐ Datos iniciales (roles, estados)
+```
+
+### 🎯 Endpoints a Desarrollar
+```
+GET  /api/categories
+POST /api/categories
+PUT  /api/categories/:id
+DELETE /api/categories/:id
+
+GET  /api/states/projects
+GET  /api/states/tasks
+POST /api/states
+PUT  /api/states/:id
+
+POST /api/upload/avatar
+POST /api/upload/document
+DELETE /api/upload/:filename
+```
+
+---
+
+## 👩‍💻 Mariana Gomez - Gestión de Proyectos
+
+### 📁 Estructura de Archivos (5 archivos)
+
+```
+mariana-files/
+├── src/
+│   ├── models/
+│   │   └── Project.model.js              # ⭐ Modelo Proyectos (complejo)
+│   │
+│   ├── controllers/
+│   │   └── project.controller.js         # ⭐ CRUD proyectos + miembros
+│   │
+│   ├── routes/
+│   │   └── project.routes.js             # Rutas proyectos
+│   │
+│   └── validators/
+│       └── project.validator.js          # Validaciones proyectos
+│
+├── tests/
+│   └── projects.test.js                  # Tests proyectos
+│
+└── scripts/
+    └── seed-projects.js                  # Proyectos de ejemplo
+```
+
+### 🎯 Endpoints a Desarrollar
+```
+GET  /api/projects
+POST /api/projects
+GET  /api/projects/:id
+PUT  /api/projects/:id
+DELETE /api/projects/:id
+POST /api/projects/:id/members
+DELETE /api/projects/:id/members/:userId
+PUT  /api/projects/:id/status
+```
+
+### 🔗 Dependencias
+- **Requiere**: Samuel (User, Role) + Franklin (Category, State)
+- **Usado por**: Mariam (Task, Comment)
+
+---
+
+## 👩‍💻 Mariam Pizza - Tareas, Comentarios e IA
+
+### 📁 Estructura de Archivos (10 archivos)
+
+```
+mariam-files/
+├── src/
+│   ├── models/
+│   │   ├── Task.model.js                 # ⭐ Modelo Tareas
+│   │   └── Comment.model.js              # ⭐ Modelo Comentarios
+│   │
+│   ├── controllers/
+│   │   ├── task.controller.js            # ⭐ CRUD tareas + asignación
+│   │   ├── comment.controller.js         # ⭐ CRUD comentarios
+│   │   └── ai.controller.js              # ⭐ Funcionalidades IA (OpenAI)
+│   │
+│   ├── routes/
+│   │   ├── task.routes.js                # Rutas tareas
+│   │   ├── comment.routes.js             # Rutas comentarios
+│   │   └── ai.routes.js                  # Rutas IA
+│   │
+│   ├── services/
+│   │   └── ai.service.js                 # Servicios IA
+│   │
+│   └── validators/
+│       ├── task.validator.js             # Validaciones tareas
+│       ├── comment.validator.js          # Validaciones comentarios
+│       └── ai.validator.js               # Validaciones IA
+│
+├── tests/
+│   ├── tasks.test.js                     # Tests tareas
+│   ├── comments.test.js                  # Tests comentarios
+│   └── ai.test.js                        # Tests IA
+│
+└── scripts/
+    └── seed-tasks.js                     # Tareas de ejemplo
+```
+
+### 🎯 Endpoints a Desarrollar
+```
+# Tareas
+GET  /api/projects/:projectId/tasks
+POST /api/projects/:projectId/tasks
+GET  /api/tasks/:id
+PUT  /api/tasks/:id
+DELETE /api/tasks/:id
+PUT  /api/tasks/:id/status
+PUT  /api/tasks/:id/assign
+GET  /api/tasks/my-tasks
+
+# Comentarios
+GET  /api/projects/:id/comments
+POST /api/projects/:id/comments
+PUT  /api/comments/:id
+DELETE /api/comments/:id
+
+# IA
+POST /api/ai/generate-tasks
+POST /api/ai/analyze-project
+POST /api/ai/estimate-time
+POST /api/ai/generate-summary
+POST /api/ai/suggest-improvements
+```
+
+### 🔗 Dependencias
+- **Requiere**: Todos los módulos anteriores
+- **Es el último**: Funcionalidades más avanzadas
+
+---
+
+## 📋 Checklist de Creación por Desarrollador
+
+### ✅ Samuel (Semana 1-2) - CRÍTICO
+- [ ] `server.js` - Servidor base
+- [ ] `package.json` - Dependencias
+- [ ] `.env.example` - Variables
+- [ ] Modelos User y Role
+- [ ] Auth controller completo
+- [ ] Middlewares auth y role
+- [ ] Tests básicos funcionando
+
+### ✅ Franklin (Semana 2-3) - DEPENDE DE SAMUEL
+- [ ] Carpetas uploads/
+- [ ] `response.util.js` - Usado por todos
+- [ ] `validation.middleware.js` - Usado por todos
+- [ ] Modelos Category y State
+- [ ] Upload middleware completo
+- [ ] Script datos iniciales
+
+### ✅ Mariana (Semana 3-4) - DEPENDE DE FRANKLIN
+- [ ] `Project.model.js` - Modelo complejo
+- [ ] Sistema de miembros
+- [ ] Permisos por proyecto
+- [ ] Validaciones de fechas
+
+### ✅ Mariam (Semana 4-5) - DEPENDE DE MARIANA
+- [ ] Modelos Task y Comment
+- [ ] Controlador IA (con/sin OpenAI)
+- [ ] Sistema de asignación
+- [ ] Integración completa
+
+---
+
+## 🚨 Archivos Críticos por Orden
+
+### 1️⃣ **PRIMERO** (Samuel):
+- `server.js`
+- `User.model.js`
+- `auth.middleware.js`
+
+### 2️⃣ **SEGUNDO** (Franklin):
+- `response.util.js`
+- `validation.middleware.js`
+- `State.model.js`
+
+### 3️⃣ **TERCERO** (Mariana):
+- `Project.model.js`
+
+### 4️⃣ **CUARTO** (Mariam):
+- `Task.model.js`
+- `Comment.model.js`
+
+## 📞 Coordinación
+
+### Daily Standups:
+- **¿Qué archivos completé ayer?**
+- **¿Qué archivos haré hoy?**  
+- **¿Qué dependencias necesito?**
+
+### Branches de Trabajo:
+- `feature/samuel-auth`
+- `feature/franklin-base`
+- `feature/mariana-projects`
+- `feature/mariam-tasks-ai`
