@@ -1,0 +1,1406 @@
+// ===================================
+// MARIAM PIZZA - CÓDIGO COMPLETO OPTIMIZADO
+// Módulo: Tareas, Comentarios e IA
+// ===================================
+
+// src/models/Task.model.js
+const mongoose = require('mongoose');
+
+const taskSchema = new mongoose.Schema({
+  title: {
+    type: String,
+    required: true,
+    trim: true,
+    maxlength: 100
+  },
+  description: {
+    type: String,
+    required: true,
+    maxlength: 1000
+  },
+  project: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Project',
+    required: true
+  },
+  assignedTo: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  createdBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
+  status: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'State',
+    required: true
+  },
+  priority: {
+    type: String,
+    enum: ['Low', 'Medium', 'High', 'Critical'],
+    default: 'Medium'
+  },
+  estimatedHours: {
+    type: Number,
+    min: 0,
+    default: 0
+  },
+  actualHours: {
+    type: Number,
+    min: 0,
+    default: 0
+  },
+  startDate: {
+    type: Date,
+    default: Date.now
+  },
+  dueDate: {
+    type: Date,
+    required: true
+  },
+  completedAt: {
+    type: Date
+  },
+  tags: [{
+    type: String,
+    trim: true,
+    maxlength: 20
+  }],
+  isActive: {
+    type: Boolean,
+    default: true
+  }
+}, {
+  timestamps: true,
+  toJSON: { virtuals: true }
+});
+
+// Virtual para verificar si está vencida
+taskSchema.virtual('isOverdue').get(function() {
+  return this.dueDate < new Date() && !this.completedAt;
+});
+
+// Índices
+taskSchema.index({ project: 1 });
+taskSchema.index({ assignedTo: 1 });
+taskSchema.index({ status: 1 });
+taskSchema.index({ dueDate: 1 });
+taskSchema.index({ isActive: 1 });
+
+module.exports = mongoose.model('Task', taskSchema);
+
+// ===================================
+// src/models/Comment.model.js
+// ===================================
+const mongoose = require('mongoose');
+
+const commentSchema = new mongoose.Schema({
+  content: {
+    type: String,
+    required: true,
+    trim: true,
+    maxlength: 2000
+  },
+  author: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
+  projectid: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Project',
+    required: true
+  },
+  editedAt: {
+    type: Date
+  }
+}, {
+  timestamps: true
+});
+
+// Índices
+commentSchema.index({ projectid: 1, createdAt: -1 });
+commentSchema.index({ author: 1 });
+
+module.exports = mongoose.model('Comment', commentSchema);
+
+// ===================================
+// src/controllers/task.controller.js
+// ===================================
+const Task = require('../models/Task.model');
+const Project = require('../models/Project.model');
+const State = require('../models/State.model');
+const { sendResponse, sendError } = require('../utils/response.util');
+
+class TaskController {
+  // Listar tareas del proyecto
+  async getProjectTasks(req, res) {
+    try {
+      const { projectId } = req.params;
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 10;
+      const skip = (page - 1) * limit;
+
+      // Verificar acceso al proyecto
+      const project = await Project.findById(projectId);
+      if (!project) {
+        return sendError(res, 404, 'Proyecto no encontrado');
+      }
+
+      const hasAccess = project.owner.toString() === req.user.userId ||
+                       project.members.some(member => 
+                         member.user.toString() === req.user.userId
+                       );
+
+      if (!hasAccess) {
+        return sendError(res, 403, 'Sin acceso al proyecto');
+      }
+
+      const tasks = await Task.find({ project: projectId, isActive: true })
+        .populate('assignedTo', 'firstName lastName email')
+        .populate('createdBy', 'firstName lastName email')
+        .populate('status', 'name description')
+        .skip(skip)
+        .limit(limit)
+        .sort({ dueDate: 1, priority: -1 });
+
+      const total = await Task.countDocuments({ project: projectId, isActive: true });
+
+      sendResponse(res, 200, true, 'Tareas obtenidas', {
+        tasks,
+        pagination: {
+          page,
+          limit,
+          total,
+          pages: Math.ceil(total / limit)
+        }
+      });
+    } catch (error) {
+      console.error('Error obtener tareas:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Crear tarea
+  async createTask(req, res) {
+    try {
+      const { projectId } = req.params;
+      const {
+        title,
+        description,
+        assignedTo,
+        priority,
+        estimatedHours,
+        dueDate,
+        tags
+      } = req.body;
+
+      // Verificar proyecto
+      const project = await Project.findById(projectId);
+      if (!project) {
+        return sendError(res, 404, 'Proyecto no encontrado');
+      }
+
+      // Verificar permisos
+      const canCreate = project.owner.toString() === req.user.userId ||
+                       project.members.some(member => 
+                         member.user.toString() === req.user.userId
+                       );
+
+      if (!canCreate) {
+        return sendError(res, 403, 'Sin permisos para crear tareas');
+      }
+
+      // Estado inicial
+      const initialState = await State.findOne({
+        type: 'Task',
+        name: 'Pendiente'
+      });
+
+      if (!initialState) {
+        return sendError(res, 500, 'Estado inicial no encontrado');
+      }
+
+      // Crear tarea
+      const task = await Task.create({
+        title,
+        description,
+        project: projectId,
+        assignedTo,
+        createdBy: req.user.userId,
+        status: initialState._id,
+        priority,
+        estimatedHours,
+        dueDate,
+        tags
+      });
+
+      await task.populate([
+        { path: 'assignedTo', select: 'firstName lastName email' },
+        { path: 'createdBy', select: 'firstName lastName email' },
+        { path: 'status', select: 'name description' }
+      ]);
+
+      sendResponse(res, 201, true, 'Tarea creada', { task });
+    } catch (error) {
+      console.error('Error crear tarea:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Obtener tarea específica
+  async getTask(req, res) {
+    try {
+      const { id } = req.params;
+
+      const task = await Task.findById(id)
+        .populate('assignedTo', 'firstName lastName email')
+        .populate('createdBy', 'firstName lastName email')
+        .populate('status', 'name description')
+        .populate('project', 'name owner members');
+
+      if (!task || !task.isActive) {
+        return sendError(res, 404, 'Tarea no encontrada');
+      }
+
+      // Verificar acceso
+      const project = task.project;
+      const hasAccess = project.owner.toString() === req.user.userId ||
+                       project.members.some(member => 
+                         member.user.toString() === req.user.userId
+                       );
+
+      if (!hasAccess) {
+        return sendError(res, 403, 'Sin acceso a la tarea');
+      }
+
+      sendResponse(res, 200, true, 'Tarea obtenida', { task });
+    } catch (error) {
+      console.error('Error obtener tarea:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Actualizar tarea
+  async updateTask(req, res) {
+    try {
+      const { id } = req.params;
+      const updateData = req.body;
+
+      const task = await Task.findById(id).populate('project');
+      if (!task || !task.isActive) {
+        return sendError(res, 404, 'Tarea no encontrada');
+      }
+
+      // Verificar permisos
+      const project = task.project;
+      const canEdit = project.owner.toString() === req.user.userId ||
+                     task.assignedTo?.toString() === req.user.userId ||
+                     project.members.some(member => 
+                       member.user.toString() === req.user.userId
+                     );
+
+      if (!canEdit) {
+        return sendError(res, 403, 'Sin permisos para editar');
+      }
+
+      const updatedTask = await Task.findByIdAndUpdate(
+        id,
+        updateData,
+        { new: true, runValidators: true }
+      ).populate([
+        { path: 'assignedTo', select: 'firstName lastName email' },
+        { path: 'createdBy', select: 'firstName lastName email' },
+        { path: 'status', select: 'name description' }
+      ]);
+
+      sendResponse(res, 200, true, 'Tarea actualizada', { task: updatedTask });
+    } catch (error) {
+      console.error('Error actualizar tarea:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Eliminar tarea
+  async deleteTask(req, res) {
+    try {
+      const { id } = req.params;
+
+      const task = await Task.findById(id).populate('project');
+      if (!task || !task.isActive) {
+        return sendError(res, 404, 'Tarea no encontrada');
+      }
+
+      // Solo owner del proyecto puede eliminar
+      if (task.project.owner.toString() !== req.user.userId) {
+        return sendError(res, 403, 'Sin permisos para eliminar');
+      }
+
+      await Task.findByIdAndUpdate(id, { isActive: false });
+
+      sendResponse(res, 200, true, 'Tarea eliminada');
+    } catch (error) {
+      console.error('Error eliminar tarea:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Cambiar estado de tarea
+  async changeTaskStatus(req, res) {
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+
+      const task = await Task.findById(id);
+      if (!task || !task.isActive) {
+        return sendError(res, 404, 'Tarea no encontrada');
+      }
+
+      // Verificar permisos
+      const canChange = task.assignedTo?.toString() === req.user.userId ||
+                       task.createdBy.toString() === req.user.userId;
+
+      if (!canChange) {
+        return sendError(res, 403, 'Sin permisos para cambiar estado');
+      }
+
+      // Verificar estado válido
+      const newStatus = await State.findById(status);
+      if (!newStatus || !newStatus.isActive || newStatus.type !== 'Task') {
+        return sendError(res, 400, 'Estado no válido');
+      }
+
+      task.status = status;
+
+      // Si el estado indica completada, marcar fecha
+      if (newStatus.name === 'Completada') {
+        task.completedAt = new Date();
+      } else {
+        task.completedAt = null;
+      }
+
+      await task.save();
+      await task.populate('status', 'name description');
+
+      sendResponse(res, 200, true, 'Estado cambiado', {
+        task: {
+          _id: task._id,
+          title: task.title,
+          status: task.status,
+          completedAt: task.completedAt
+        }
+      });
+    } catch (error) {
+      console.error('Error cambiar estado:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Asignar tarea
+  async assignTask(req, res) {
+    try {
+      const { id } = req.params;
+      const { user } = req.body;
+
+      const task = await Task.findById(id).populate('project');
+      if (!task || !task.isActive) {
+        return sendError(res, 404, 'Tarea no encontrada');
+      }
+
+      // Solo owner del proyecto puede asignar
+      if (task.project.owner.toString() !== req.user.userId) {
+        return sendError(res, 403, 'Sin permisos para asignar');
+      }
+
+      // Verificar que el usuario es miembro del proyecto
+      const isProjectMember = task.project.owner.toString() === user ||
+                             task.project.members.some(member => 
+                               member.user.toString() === user
+                             );
+
+      if (!isProjectMember) {
+        return sendError(res, 400, 'El usuario debe ser miembro del proyecto');
+      }
+
+      task.assignedTo = user;
+      await task.save();
+
+      await task.populate('assignedTo', 'firstName lastName email');
+
+      sendResponse(res, 200, true, 'Tarea asignada', {
+        task: {
+          _id: task._id,
+          title: task.title,
+          assignedTo: task.assignedTo
+        }
+      });
+    } catch (error) {
+      console.error('Error asignar tarea:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Mis tareas
+  async getMyTasks(req, res) {
+    try {
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 10;
+      const skip = (page - 1) * limit;
+
+      const tasks = await Task.find({
+        assignedTo: req.user.userId,
+        isActive: true
+      })
+      .populate('project', 'name')
+      .populate('status', 'name description')
+      .populate('createdBy', 'firstName lastName')
+      .skip(skip)
+      .limit(limit)
+      .sort({ dueDate: 1, priority: -1 });
+
+      const total = await Task.countDocuments({
+        assignedTo: req.user.userId,
+        isActive: true
+      });
+
+      sendResponse(res, 200, true, 'Mis tareas obtenidas', {
+        tasks,
+        pagination: {
+          page,
+          limit,
+          total,
+          pages: Math.ceil(total / limit)
+        }
+      });
+    } catch (error) {
+      console.error('Error mis tareas:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+}
+
+module.exports = new TaskController();
+
+// ===================================
+// src/controllers/comment.controller.js
+// ===================================
+const Comment = require('../models/Comment.model');
+const Project = require('../models/Project.model');
+const { sendResponse, sendError } = require('../utils/response.util');
+
+class CommentController {
+  // Obtener comentarios del proyecto
+  async getProjectComments(req, res) {
+    try {
+      const { id } = req.params;
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 20;
+      const skip = (page - 1) * limit;
+
+      // Verificar acceso al proyecto
+      const project = await Project.findById(id);
+      if (!project) {
+        return sendError(res, 404, 'Proyecto no encontrado');
+      }
+
+      const hasAccess = project.owner.toString() === req.user.userId ||
+                       project.members.some(member => 
+                         member.user.toString() === req.user.userId
+                       );
+
+      if (!hasAccess) {
+        return sendError(res, 403, 'Sin acceso al proyecto');
+      }
+
+      const comments = await Comment.find({ projectid: id })
+        .populate('author', 'firstName lastName email')
+        .skip(skip)
+        .limit(limit)
+        .sort({ createdAt: -1 });
+
+      const total = await Comment.countDocuments({ projectid: id });
+
+      sendResponse(res, 200, true, 'Comentarios obtenidos', {
+        comments,
+        pagination: {
+          page,
+          limit,
+          total,
+          pages: Math.ceil(total / limit)
+        }
+      });
+    } catch (error) {
+      console.error('Error obtener comentarios:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Crear comentario
+  async createComment(req, res) {
+    try {
+      const { id } = req.params;
+      const { content } = req.body;
+
+      // Verificar acceso al proyecto
+      const project = await Project.findById(id);
+      if (!project) {
+        return sendError(res, 404, 'Proyecto no encontrado');
+      }
+
+      const hasAccess = project.owner.toString() === req.user.userId ||
+                       project.members.some(member => 
+                         member.user.toString() === req.user.userId
+                       );
+
+      if (!hasAccess) {
+        return sendError(res, 403, 'Sin acceso al proyecto');
+      }
+
+      const comment = await Comment.create({
+        content,
+        author: req.user.userId,
+        projectid: id
+      });
+
+      await comment.populate('author', 'firstName lastName email');
+
+      sendResponse(res, 201, true, 'Comentario creado', { comment });
+    } catch (error) {
+      console.error('Error crear comentario:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Editar comentario
+  async updateComment(req, res) {
+    try {
+      const { id } = req.params;
+      const { content } = req.body;
+
+      const comment = await Comment.findById(id);
+      if (!comment) {
+        return sendError(res, 404, 'Comentario no encontrado');
+      }
+
+      // Solo el autor puede editar
+      if (comment.author.toString() !== req.user.userId) {
+        return sendError(res, 403, 'Solo puedes editar tus comentarios');
+      }
+
+      comment.content = content;
+      comment.editedAt = new Date();
+      await comment.save();
+
+      await comment.populate('author', 'firstName lastName email');
+
+      sendResponse(res, 200, true, 'Comentario actualizado', { comment });
+    } catch (error) {
+      console.error('Error actualizar comentario:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Eliminar comentario
+  async deleteComment(req, res) {
+    try {
+      const { id } = req.params;
+
+      const comment = await Comment.findById(id);
+      if (!comment) {
+        return sendError(res, 404, 'Comentario no encontrado');
+      }
+
+      // Solo el autor o admin pueden eliminar
+      const canDelete = comment.author.toString() === req.user.userId ||
+                       req.user.role === 'Admin';
+
+      if (!canDelete) {
+        return sendError(res, 403, 'Sin permisos para eliminar');
+      }
+
+      await Comment.findByIdAndDelete(id);
+
+      sendResponse(res, 200, true, 'Comentario eliminado');
+    } catch (error) {
+      console.error('Error eliminar comentario:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+}
+
+module.exports = new CommentController();
+
+// ===================================
+// src/controllers/ai.controller.js
+// ===================================
+const OpenAI = require('openai');
+const Task = require('../models/Task.model');
+const Project = require('../models/Project.model');
+const Comment = require('../models/Comment.model');
+const State = require('../models/State.model');
+const { sendResponse, sendError } = require('../utils/response.util');
+
+// Inicializar OpenAI (solo si hay API key)
+const openai = process.env.OPENAI_API_KEY ? new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
+}) : null;
+
+class AIController {
+  // Generar tareas automáticamente
+  async generateTasks(req, res) {
+    try {
+      if (!openai) {
+        return sendError(res, 500, 'OpenAI no configurado');
+      }
+
+      const { projectDescription, projectId } = req.body;
+
+      // Verificar acceso al proyecto
+      const project = await Project.findById(projectId).populate('category');
+      if (!project) {
+        return sendError(res, 404, 'Proyecto no encontrado');
+      }
+
+      const hasAccess = project.owner.toString() === req.user.userId ||
+                       project.members.some(member => 
+                         member.user.toString() === req.user.userId
+                       );
+
+      if (!hasAccess) {
+        return sendError(res, 403, 'Sin acceso al proyecto');
+      }
+
+      // Crear prompt para IA
+      const prompt = `
+Genera una lista de 8-12 tareas específicas para este proyecto:
+
+PROYECTO: ${project.name}
+DESCRIPCIÓN: ${projectDescription}
+
+Cada tarea debe incluir:
+- Título específico y claro
+- Descripción detallada
+- Estimación de horas (1-40)
+- Prioridad (Low, Medium, High, Critical)
+
+Responde en formato JSON:
+{
+  "tasks": [
+    {
+      "title": "Título de la tarea",
+      "description": "Descripción detallada",
+      "estimatedHours": 8,
+      "priority": "Medium"
+    }
+  ]
+}
+      `;
+
+      try {
+        const completion = await openai.chat.completions.create({
+          model: 'gpt-3.5-turbo',
+          messages: [
+            {
+              role: 'system',
+              content: 'Eres un experto project manager que genera tareas detalladas para proyectos de desarrollo.'
+            },
+            {
+              role: 'user',
+              content: prompt
+            }
+          ],
+          temperature: 0.7,
+          max_tokens: 2000
+        });
+
+        const aiResponse = completion.choices[0].message.content;
+        
+        // Parsear respuesta JSON
+        let generatedTasks;
+        try {
+          const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
+          generatedTasks = jsonMatch ? JSON.parse(jsonMatch[0]) : { tasks: [] };
+        } catch (parseError) {
+          console.error('Error parseando IA:', parseError);
+          generatedTasks = { tasks: [] };
+        }
+
+        sendResponse(res, 200, true, 'Tareas generadas con IA', {
+          generatedTasks: generatedTasks.tasks || [],
+          projectId,
+          aiMetadata: {
+            model: 'gpt-3.5-turbo',
+            generatedAt: new Date()
+          }
+        });
+      } catch (aiError) {
+        console.error('Error OpenAI:', aiError);
+        sendError(res, 500, 'Error generando tareas con IA');
+      }
+    } catch (error) {
+      console.error('Error generar tareas:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Analizar proyecto
+  async analyzeProject(req, res) {
+    try {
+      if (!openai) {
+        return sendError(res, 500, 'OpenAI no configurado');
+      }
+
+      const { projectId } = req.body;
+
+      const project = await Project.findById(projectId)
+        .populate('status')
+        .populate('category');
+
+      if (!project) {
+        return sendError(res, 404, 'Proyecto no encontrado');
+      }
+
+      // Obtener tareas y comentarios recientes
+      const tasks = await Task.find({ project: projectId, isActive: true })
+        .populate('status');
+
+      const recentComments = await Comment.find({
+        projectid: projectId,
+        createdAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }
+      });
+
+      const prompt = `
+Analiza este proyecto y proporciona recomendaciones:
+
+PROYECTO: ${project.name}
+ESTADO: ${project.status.name}
+TAREAS TOTALES: ${tasks.length}
+TAREAS COMPLETADAS: ${tasks.filter(t => t.completedAt).length}
+COMENTARIOS RECIENTES: ${recentComments.length}
+
+Proporciona:
+1. Estado general del proyecto
+2. Principales riesgos
+3. Recomendaciones específicas
+4. Próximos pasos sugeridos
+
+Responde en formato JSON:
+{
+  "overallHealth": "Good|Fair|Poor",
+  "risks": ["riesgo1", "riesgo2"],
+  "recommendations": ["rec1", "rec2"],
+  "nextSteps": ["paso1", "paso2"]
+}
+      `;
+
+      try {
+        const completion = await openai.chat.completions.create({
+          model: 'gpt-3.5-turbo',
+          messages: [
+            {
+              role: 'system',
+              content: 'Eres un consultor experto en gestión de proyectos.'
+            },
+            {
+              role: 'user',
+              content: prompt
+            }
+          ],
+          temperature: 0.3,
+          max_tokens: 1000
+        });
+
+        const aiResponse = completion.choices[0].message.content;
+        
+        let analysis;
+        try {
+          const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
+          analysis = jsonMatch ? JSON.parse(jsonMatch[0]) : {
+            overallHealth: 'Good',
+            risks: [],
+            recommendations: [],
+            nextSteps: []
+          };
+        } catch (parseError) {
+          analysis = {
+            overallHealth: 'Good',
+            risks: ['Error procesando análisis'],
+            recommendations: [aiResponse],
+            nextSteps: []
+          };
+        }
+
+        sendResponse(res, 200, true, 'Análisis completado', {
+          analysis,
+          projectStats: {
+            totalTasks: tasks.length,
+            completedTasks: tasks.filter(t => t.completedAt).length,
+            overdueTasks: tasks.filter(t => t.dueDate < new Date() && !t.completedAt).length
+          }
+        });
+      } catch (aiError) {
+        console.error('Error análisis IA:', aiError);
+        sendError(res, 500, 'Error analizando con IA');
+      }
+    } catch (error) {
+      console.error('Error analizar proyecto:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Estimar tiempo
+  async estimateTime(req, res) {
+    try {
+      if (!openai) {
+        // Estimación básica sin IA
+        const { taskDescription } = req.body;
+        const wordCount = taskDescription.split(' ').length;
+        const baseHours = Math.max(2, Math.min(40, Math.ceil(wordCount / 10)));
+        
+        return sendResponse(res, 200, true, 'Estimación básica', {
+          estimation: {
+            recommended: baseHours,
+            range: {
+              min: Math.ceil(baseHours * 0.7),
+              max: Math.ceil(baseHours * 1.5)
+            }
+          }
+        });
+      }
+
+      const { taskDescription, complexity = 'Medium' } = req.body;
+
+      const prompt = `
+Estima el tiempo necesario para esta tarea de desarrollo:
+
+DESCRIPCIÓN: ${taskDescription}
+COMPLEJIDAD: ${complexity}
+
+Proporciona estimación en horas considerando:
+- Análisis y diseño
+- Implementación
+- Testing
+- Documentación
+
+Responde en formato JSON:
+{
+  "recommended": 8,
+  "range": {
+    "min": 6,
+    "max": 12
+  },
+  "breakdown": ["análisis: 2h", "desarrollo: 4h", "testing: 2h"]
+}
+      `;
+
+      try {
+        const completion = await openai.chat.completions.create({
+          model: 'gpt-3.5-turbo',
+          messages: [
+            {
+              role: 'system',
+              content: 'Eres un technical lead experto en estimación de tareas de desarrollo.'
+            },
+            {
+              role: 'user',
+              content: prompt
+            }
+          ],
+          temperature: 0.2,
+          max_tokens: 500
+        });
+
+        const aiResponse = completion.choices[0].message.content;
+        
+        let estimation;
+        try {
+          const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
+          estimation = jsonMatch ? JSON.parse(jsonMatch[0]) : {
+            recommended: 8,
+            range: { min: 6, max: 12 },
+            breakdown: []
+          };
+        } catch (parseError) {
+          estimation = {
+            recommended: 8,
+            range: { min: 6, max: 12 },
+            breakdown: []
+          };
+        }
+
+        sendResponse(res, 200, true, 'Estimación completada', { estimation });
+      } catch (aiError) {
+        console.error('Error estimación IA:', aiError);
+        sendError(res, 500, 'Error estimando con IA');
+      }
+    } catch (error) {
+      console.error('Error estimar tiempo:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Generar resumen
+  async generateSummary(req, res) {
+    try {
+      const { projectId } = req.body;
+
+      const project = await Project.findById(projectId);
+      if (!project) {
+        return sendError(res, 404, 'Proyecto no encontrado');
+      }
+
+      // Obtener estadísticas básicas
+      const totalTasks = await Task.countDocuments({ project: projectId, isActive: true });
+      const completedTasks = await Task.countDocuments({ 
+        project: projectId, 
+        isActive: true, 
+        completedAt: { $exists: true } 
+      });
+      
+      const progress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+
+      if (!openai) {
+        // Resumen básico sin IA
+        const summary = `
+Resumen del Proyecto: ${project.name}
+
+📊 Estadísticas:
+- Progreso: ${progress}% completado
+- Tareas totales: ${totalTasks}
+- Tareas completadas: ${completedTasks}
+- Tareas pendientes: ${totalTasks - completedTasks}
+
+📅 Cronograma:
+- Fecha de inicio: ${project.startDate.toLocaleDateString()}
+- Fecha de fin: ${project.endDate.toLocaleDateString()}
+- Días restantes: ${project.daysRemaining}
+
+Este es un resumen básico del estado actual del proyecto.
+        `;
+
+        return sendResponse(res, 200, true, 'Resumen generado', { summary });
+      }
+
+      const recentTasks = await Task.find({
+        project: projectId,
+        createdAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }
+      });
+
+      const prompt = `
+Genera un resumen ejecutivo para este proyecto:
+
+PROYECTO: ${project.name}
+PROGRESO: ${progress}%
+TAREAS TOTALES: ${totalTasks}
+COMPLETADAS: ${completedTasks}
+NUEVAS ESTA SEMANA: ${recentTasks.length}
+
+Genera un resumen ejecutivo profesional que incluya:
+- Estado actual
+- Logros principales
+- Métricas clave
+- Próximos pasos
+
+Máximo 300 palabras, tono profesional.
+      `;
+
+      try {
+        const completion = await openai.chat.completions.create({
+          model: 'gpt-3.5-turbo',
+          messages: [
+            {
+              role: 'system',
+              content: 'Eres un project manager que crea resúmenes ejecutivos claros y profesionales.'
+            },
+            {
+              role: 'user',
+              content: prompt
+            }
+          ],
+          temperature: 0.4,
+          max_tokens: 400
+        });
+
+        const summary = completion.choices[0].message.content;
+
+        sendResponse(res, 200, true, 'Resumen generado', {
+          summary,
+          stats: {
+            totalTasks,
+            completedTasks,
+            progress,
+            recentTasks: recentTasks.length
+          }
+        });
+      } catch (aiError) {
+        console.error('Error generar resumen:', aiError);
+        sendError(res, 500, 'Error generando resumen con IA');
+      }
+    } catch (error) {
+      console.error('Error generar resumen:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Sugerir mejoras
+  async suggestImprovements(req, res) {
+    try {
+      const { projectId } = req.body;
+
+      const project = await Project.findById(projectId);
+      if (!project) {
+        return sendError(res, 404, 'Proyecto no encontrado');
+      }
+
+      // Obtener datos para análisis
+      const tasks = await Task.find({ project: projectId, isActive: true })
+        .populate('status');
+      
+      const comments = await Comment.find({ projectid: projectId })
+        .sort({ createdAt: -1 })
+        .limit(10);
+
+      const overdueTasks = tasks.filter(t => t.dueDate < new Date() && !t.completedAt);
+
+      let suggestions = [
+        'Revisar tareas vencidas y ajustar cronograma',
+        'Mejorar comunicación del equipo mediante reuniones regulares',
+        'Implementar revisiones de código para mayor calidad',
+        'Documentar procesos para futuros proyectos'
+      ];
+
+      if (overdueTasks.length > 0) {
+        suggestions.unshift(`Atención: ${overdueTasks.length} tareas vencidas requieren revisión urgente`);
+      }
+
+      if (comments.length < 5) {
+        suggestions.push('Fomentar más comunicación mediante comentarios en el proyecto');
+      }
+
+      sendResponse(res, 200, true, 'Sugerencias generadas', {
+        suggestions,
+        metrics: {
+          totalTasks: tasks.length,
+          overdueTasks: overdueTasks.length,
+          recentComments: comments.length
+        }
+      });
+    } catch (error) {
+      console.error('Error sugerir mejoras:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+}
+
+module.exports = new AIController();
+
+// ===================================
+// src/routes/task.routes.js
+// ===================================
+const express = require('express');
+const router = express.Router();
+const taskController = require('../controllers/task.controller');
+const { validateTask, validateTaskStatus, validateAssign } = require('../validators/task.validator');
+const { authenticate } = require('../middlewares/auth.middleware');
+const { handleValidation } = require('../middlewares/validation.middleware');
+
+router.use(authenticate);
+
+router.get('/projects/:projectId/tasks', taskController.getProjectTasks);
+router.post('/projects/:projectId/tasks', validateTask, handleValidation, taskController.createTask);
+router.get('/my-tasks', taskController.getMyTasks);
+router.get('/:id', taskController.getTask);
+router.put('/:id', validateTask, handleValidation, taskController.updateTask);
+router.delete('/:id', taskController.deleteTask);
+router.put('/:id/status', validateTaskStatus, handleValidation, taskController.changeTaskStatus);
+router.put('/:id/assign', validateAssign, handleValidation, taskController.assignTask);
+
+module.exports = router;
+
+// ===================================
+// src/routes/comment.routes.js
+// ===================================
+const express = require('express');
+const router = express.Router();
+const commentController = require('../controllers/comment.controller');
+const { validateComment } = require('../validators/comment.validator');
+const { authenticate } = require('../middlewares/auth.middleware');
+const { handleValidation } = require('../middlewares/validation.middleware');
+
+router.use(authenticate);
+
+router.get('/projects/:id/comments', commentController.getProjectComments);
+router.post('/projects/:id/comments', validateComment, handleValidation, commentController.createComment);
+router.put('/:id', validateComment, handleValidation, commentController.updateComment);
+router.delete('/:id', commentController.deleteComment);
+
+module.exports = router;
+
+// ===================================
+// src/routes/ai.routes.js
+// ===================================
+const express = require('express');
+const router = express.Router();
+const aiController = require('../controllers/ai.controller');
+const { validateAI } = require('../validators/ai.validator');
+const { authenticate } = require('../middlewares/auth.middleware');
+const { handleValidation } = require('../middlewares/validation.middleware');
+
+router.use(authenticate);
+
+router.post('/generate-tasks', validateAI.generateTasks, handleValidation, aiController.generateTasks);
+router.post('/analyze-project', validateAI.analyzeProject, handleValidation, aiController.analyzeProject);
+router.post('/estimate-time', validateAI.estimateTime, handleValidation, aiController.estimateTime);
+router.post('/generate-summary', validateAI.generateSummary, handleValidation, aiController.generateSummary);
+router.post('/suggest-improvements', validateAI.suggestImprovements, handleValidation, aiController.suggestImprovements);
+
+module.exports = router;
+
+// ===================================
+// src/validators/task.validator.js
+// ===================================
+const { body } = require('express-validator');
+
+const validateTask = [
+  body('title')
+    .trim()
+    .isLength({ min: 3, max: 100 })
+    .withMessage('Título: 3-100 caracteres'),
+
+  body('description')
+    .trim()
+    .isLength({ min: 10, max: 1000 })
+    .withMessage('Descripción: 10-1000 caracteres'),
+
+  body('assignedTo')
+    .optional()
+    .isMongoId()
+    .withMessage('ID de usuario inválido'),
+
+  body('priority')
+    .optional()
+    .isIn(['Low', 'Medium', 'High', 'Critical'])
+    .withMessage('Prioridad inválida'),
+
+  body('estimatedHours')
+    .optional()
+    .isFloat({ min: 0 })
+    .withMessage('Horas estimadas deben ser positivas'),
+
+  body('dueDate')
+    .isISO8601()
+    .withMessage('Fecha límite inválida'),
+
+  body('tags')
+    .optional()
+    .isArray()
+    .withMessage('Tags deben ser un array')
+];
+
+const validateTaskStatus = [
+  body('status')
+    .isMongoId()
+    .withMessage('ID de estado inválido')
+];
+
+const validateAssign = [
+  body('user')
+    .isMongoId()
+    .withMessage('ID de usuario inválido')
+];
+
+module.exports = {
+  validateTask,
+  validateTaskStatus,
+  validateAssign
+};
+
+// ===================================
+// src/validators/comment.validator.js
+// ===================================
+const { body } = require('express-validator');
+
+const validateComment = [
+  body('content')
+    .trim()
+    .isLength({ min: 1, max: 2000 })
+    .withMessage('Contenido: 1-2000 caracteres')
+];
+
+module.exports = { validateComment };
+
+// ===================================
+// src/validators/ai.validator.js
+// ===================================
+const { body } = require('express-validator');
+
+const generateTasks = [
+  body('projectDescription')
+    .trim()
+    .isLength({ min: 20, max: 2000 })
+    .withMessage('Descripción: 20-2000 caracteres'),
+
+  body('projectId')
+    .isMongoId()
+    .withMessage('ID de proyecto inválido')
+];
+
+const analyzeProject = [
+  body('projectId')
+    .isMongoId()
+    .withMessage('ID de proyecto inválido')
+];
+
+const estimateTime = [
+  body('taskDescription')
+    .trim()
+    .isLength({ min: 10, max: 1000 })
+    .withMessage('Descripción: 10-1000 caracteres'),
+
+  body('complexity')
+    .optional()
+    .isIn(['Low', 'Medium', 'High'])
+    .withMessage('Complejidad inválida')
+];
+
+const generateSummary = [
+  body('projectId')
+    .isMongoId()
+    .withMessage('ID de proyecto inválido')
+];
+
+const suggestImprovements = [
+  body('projectId')
+    .isMongoId()
+    .withMessage('ID de proyecto inválido')
+];
+
+module.exports = {
+  validateAI: {
+    generateTasks,
+    analyzeProject,
+    estimateTime,
+    generateSummary,
+    suggestImprovements
+  }
+};
+
+// ===================================
+// Configuración adicional para IA
+// ===================================
+
+// package.json - Dependencia adicional
+/*
+{
+  "dependencies": {
+    "openai": "^4.0.0"
+  }
+}
+*/
+
+// .env - Variables adicionales
+/*
+# OpenAI Configuration
+OPENAI_API_KEY=sk-your_openai_api_key_here
+*/
+
+// ===================================
+// Instrucciones para Mariam
+// ===================================
+
+/*
+INSTRUCCIONES PARA MARIAM PIZZA:
+
+1. DEPENDENCIES:
+   - npm install openai
+   - Obtener API Key de OpenAI (opcional, funciona sin IA)
+
+2. ARCHIVOS A CREAR:
+   - src/models/Task.model.js
+   - src/models/Comment.model.js
+   - src/controllers/task.controller.js
+   - src/controllers/comment.controller.js
+   - src/controllers/ai.controller.js
+   - src/routes/task.routes.js
+   - src/routes/comment.routes.js
+   - src/routes/ai.routes.js
+   - src/validators/task.validator.js
+   - src/validators/comment.validator.js
+   - src/validators/ai.validator.js
+
+3. ENDPOINTS PRINCIPALES:
+   Tasks:
+   - GET /api/projects/:projectId/tasks
+   - POST /api/projects/:projectId/tasks
+   - GET /api/tasks/:id
+   - PUT /api/tasks/:id
+   - DELETE /api/tasks/:id
+   - PUT /api/tasks/:id/status
+   - PUT /api/tasks/:id/assign
+   - GET /api/tasks/my-tasks
+
+   Comments:
+   - GET /api/projects/:id/comments
+   - POST /api/projects/:id/comments
+   - PUT /api/comments/:id
+   - DELETE /api/comments/:id
+
+   AI:
+   - POST /api/ai/generate-tasks
+   - POST /api/ai/analyze-project
+   - POST /api/ai/estimate-time
+   - POST /api/ai/generate-summary
+   - POST /api/ai/suggest-improvements
+
+4. VALIDACIONES:
+   - Tareas: título (3-100), descripción (10-1000), dueDate obligatorio
+   - Comentarios: contenido (1-2000 caracteres)
+   - IA: projectId y descripciones válidas
+
+5. PERMISOS:
+   - Ver tareas: miembro del proyecto
+   - Crear: miembro del proyecto
+   - Editar: asignado o creador
+   - Eliminar: owner del proyecto
+   - Cambiar estado: asignado o creador
+   - Asignar: owner del proyecto
+
+6. CARACTERÍSTICAS IA:
+   - Funciona sin OpenAI (respuestas básicas)
+   - Con OpenAI: respuestas inteligentes
+   - Modelos: gpt-3.5-turbo (más económico)
+   - JSON parsing automático
+   - Fallbacks si falla IA
+
+7. RELACIONES:
+   - Task.project -> Project (Mariana)
+   - Task.assignedTo -> User (Samuel)
+   - Task.createdBy -> User (Samuel)
+   - Task.status -> State (Franklin)
+   - Comment.author -> User (Samuel)
+   - Comment.projectid -> Project (Mariana)
+
+8. ORDEN DE TRABAJO:
+   Semana 4: Después de proyectos (Mariana)
+   - Día 1-2: Modelos Task y Comment
+   - Día 3: Controladores de tareas
+   - Día 4: Controladores de comentarios
+   - Día 5: Controlador de IA
+
+9. NOTAS ESPECIALES:
+   - Campo projectid (no projectId) en Comment
+   - Virtual isOverdue en Task
+   - completedAt se marca automáticamente
+   - IA funciona sin API key (modo básico)
+   - Estados iniciales: "Pendiente" para tareas
+
+10. TESTING:
+    - Crear proyecto primero (Mariana)
+    - Asignar tareas a usuarios del proyecto
+    - Comentarios requieren acceso al proyecto
+    - IA funciona con/sin OpenAI
+
+¡LISTO PARA DESARROLLAR TAREAS E IA! 🤖🚀
+*/
