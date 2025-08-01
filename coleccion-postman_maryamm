@@ -1,0 +1,815 @@
+{
+  "info": {
+    "name": "Mariam Pizza - Tasks, Comments & AI",
+    "description": "Endpoints de tareas, comentarios e inteligencia artificial",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{auth_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "{{base_url}}"
+    }
+  ],
+  "item": [
+    {
+      "name": "✅ TASKS",
+      "item": [
+        {
+          "name": "Get Project Tasks",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    console.log('Tareas del proyecto:', response.data.pagination.total);",
+                  "    if (response.data.tasks.length > 0) {",
+                  "        pm.environment.set('task_id', response.data.tasks[0]._id);",
+                  "        console.log('Task ID guardado:', response.data.tasks[0]._id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/projects/{{new_project_id}}/tasks?page=1&limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["projects", "{{new_project_id}}", "tasks"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Task",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    pm.environment.set('new_task_id', response.data.task._id);",
+                  "    console.log('Nueva tarea creada:', response.data.task.title);",
+                  "    console.log('Task ID:', response.data.task._id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Implementar autenticación JWT\",\n  \"description\": \"Desarrollar sistema completo de autenticación con JWT, incluyendo login, registro, refresh token y middleware de protección de rutas\",\n  \"assignedTo\": \"{{user_id}}\",\n  \"priority\": \"High\",\n  \"estimatedHours\": 16,\n  \"dueDate\": \"2024-02-15T23:59:59.000Z\",\n  \"tags\": [\"auth\", \"jwt\", \"security\", \"backend\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/projects/{{new_project_id}}/tasks",
+              "host": ["{{base_url}}"],
+              "path": ["projects", "{{new_project_id}}", "tasks"]
+            }
+          }
+        },
+        {
+          "name": "Get Task Details",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    console.log('Tarea:', response.data.task.title);",
+                  "    console.log('Asignada a:', response.data.task.assignedTo?.firstName || 'Sin asignar');",
+                  "    console.log('Estado:', response.data.task.status.name);",
+                  "    console.log('Vence en:', response.data.task.dueDate);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/tasks/{{new_task_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["tasks", "{{new_task_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Update Task",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Implementar autenticación JWT completa\",\n  \"description\": \"Sistema completo de autenticación con JWT, OAuth2, verificación de email, recuperación de contraseña y middleware de autorización por roles\",\n  \"priority\": \"Critical\",\n  \"estimatedHours\": 24,\n  \"actualHours\": 12,\n  \"tags\": [\"auth\", \"jwt\", \"oauth2\", \"security\", \"backend\", \"middleware\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/tasks/{{new_task_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["tasks", "{{new_task_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Change Task Status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    console.log('Estado cambiado a:', response.data.task.status.name);",
+                  "    if (response.data.task.completedAt) {",
+                  "        console.log('Tarea completada en:', response.data.task.completedAt);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"{{task_state_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/tasks/{{new_task_id}}/status",
+              "host": ["{{base_url}}"],
+              "path": ["tasks", "{{new_task_id}}", "status"]
+            }
+          }
+        },
+        {
+          "name": "Assign Task to User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    console.log('Tarea asignada a:', response.data.task.assignedTo.firstName);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user\": \"{{user_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/tasks/{{new_task_id}}/assign",
+              "host": ["{{base_url}}"],
+              "path": ["tasks", "{{new_task_id}}", "assign"]
+            }
+          }
+        },
+        {
+          "name": "Get My Tasks",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    console.log('Mis tareas:', response.data.pagination.total);",
+                  "    response.data.tasks.forEach((task, index) => {",
+                  "        console.log(`${index + 1}. ${task.title} (${task.priority})`);",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/tasks/my-tasks?page=1&limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["tasks", "my-tasks"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Task",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/tasks/{{task_to_delete_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["tasks", "{{task_to_delete_id}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "💬 COMMENTS",
+      "item": [
+        {
+          "name": "Get Project Comments",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    console.log('Comentarios del proyecto:', response.data.pagination.total);",
+                  "    if (response.data.comments.length > 0) {",
+                  "        pm.environment.set('comment_id', response.data.comments[0]._id);",
+                  "        console.log('Comment ID guardado:', response.data.comments[0]._id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/projects/{{new_project_id}}/comments?page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["projects", "{{new_project_id}}", "comments"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Comment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    pm.environment.set('new_comment_id', response.data.comment._id);",
+                  "    console.log('Nuevo comentario creado por:', response.data.comment.author.firstName);",
+                  "    console.log('Comment ID:', response.data.comment._id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"El progreso del proyecto va muy bien. Hemos completado la configuración inicial del servidor y la base de datos. Próximo paso: implementar la autenticación JWT. ¿Alguien tiene experiencia con refresh tokens?\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/projects/{{new_project_id}}/comments",
+              "host": ["{{base_url}}"],
+              "path": ["projects", "{{new_project_id}}", "comments"]
+            }
+          }
+        },
+        {
+          "name": "Update Comment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    console.log('Comentario actualizado');",
+                  "    if (response.data.comment.editedAt) {",
+                  "        console.log('Editado en:', response.data.comment.editedAt);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"[ACTUALIZADO] El progreso del proyecto va excelente. Hemos completado la configuración inicial del servidor, base de datos y middleware de seguridad. Próximo paso: implementar la autenticación JWT completa con refresh tokens. Ya encontré una buena librería para esto.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/comments/{{new_comment_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["comments", "{{new_comment_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete Comment",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/comments/{{comment_to_delete_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["comments", "{{comment_to_delete_id}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🤖 ARTIFICIAL INTELLIGENCE",
+      "item": [
+        {
+          "name": "Generate Tasks with AI",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    console.log('Tareas generadas por IA:', response.data.generatedTasks.length);",
+                  "    response.data.generatedTasks.forEach((task, index) => {",
+                  "        console.log(`${index + 1}. ${task.title} (${task.estimatedHours}h)`);",
+                  "    });",
+                  "    ",
+                  "    if (response.data.generatedTasks.length > 0) {",
+                  "        pm.environment.set('ai_generated_tasks', JSON.stringify(response.data.generatedTasks));",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"projectDescription\": \"Crear una aplicación web de e-commerce completa con carrito de compras, sistema de pagos, gestión de inventario, panel de administración, sistema de reviews, notificaciones por email y análisis de ventas. La aplicación debe ser responsive, segura y escalable.\",\n  \"projectId\": \"{{new_project_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/ai/generate-tasks",
+              "host": ["{{base_url}}"],
+              "path": ["ai", "generate-tasks"]
+            }
+          }
+        },
+        {
+          "name": "Analyze Project with AI",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    console.log('=== ANÁLISIS DEL PROYECTO ===');",
+                  "    console.log('Estado general:', response.data.analysis.overallHealth);",
+                  "    console.log('Riesgos identificados:', response.data.analysis.risks.length);",
+                  "    console.log('Recomendaciones:', response.data.analysis.recommendations.length);",
+                  "    console.log('Próximos pasos:', response.data.analysis.nextSteps.length);",
+                  "    ",
+                  "    console.log('=== ESTADÍSTICAS ===');",
+                  "    console.log('Total tareas:', response.data.projectStats.totalTasks);",
+                  "    console.log('Tareas completadas:', response.data.projectStats.completedTasks);",
+                  "    console.log('Tareas vencidas:', response.data.projectStats.overdueTasks);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"projectId\": \"{{new_project_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/ai/analyze-project",
+              "host": ["{{base_url}}"],
+              "path": ["ai", "analyze-project"]
+            }
+          }
+        },
+        {
+          "name": "Estimate Task Time with AI",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    console.log('=== ESTIMACIÓN DE TIEMPO ===');",
+                  "    console.log('Tiempo recomendado:', response.data.estimation.recommended, 'horas');",
+                  "    console.log('Rango estimado:', response.data.estimation.range.min, '-', response.data.estimation.range.max, 'horas');",
+                  "    if (response.data.estimation.breakdown) {",
+                  "        console.log('Desglose:', response.data.estimation.breakdown);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"taskDescription\": \"Implementar sistema completo de notificaciones push para aplicación móvil, incluyendo configuración de Firebase, manejo de tokens, envío de notificaciones programadas, personalización de mensajes y analytics de engagement\",\n  \"complexity\": \"High\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/ai/estimate-time",
+              "host": ["{{base_url}}"],
+              "path": ["ai", "estimate-time"]
+            }
+          }
+        },
+        {
+          "name": "Generate Project Summary with AI",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    console.log('=== RESUMEN DEL PROYECTO ===');",
+                  "    console.log(response.data.summary);",
+                  "    console.log('');",
+                  "    console.log('=== ESTADÍSTICAS ===');",
+                  "    console.log('Total tareas:', response.data.stats.totalTasks);",
+                  "    console.log('Completadas:', response.data.stats.completedTasks);",
+                  "    console.log('Progreso:', response.data.stats.progress + '%');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"projectId\": \"{{new_project_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/ai/generate-summary",
+              "host": ["{{base_url}}"],
+              "path": ["ai", "generate-summary"]
+            }
+          }
+        },
+        {
+          "name": "Get AI Suggestions for Improvements",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    console.log('=== SUGERENCIAS DE MEJORA ===');",
+                  "    response.data.suggestions.forEach((suggestion, index) => {",
+                  "        console.log(`${index + 1}. ${suggestion}`);",
+                  "    });",
+                  "    ",
+                  "    console.log('');",
+                  "    console.log('=== MÉTRICAS ===');",
+                  "    console.log('Total tareas:', response.data.metrics.totalTasks);",
+                  "    console.log('Tareas vencidas:', response.data.metrics.overdueTasks);",
+                  "    console.log('Comentarios recientes:', response.data.metrics.recentComments);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"projectId\": \"{{new_project_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/ai/suggest-improvements",
+              "host": ["{{base_url}}"],
+              "path": ["ai", "suggest-improvements"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🧪 TASK TEST SCENARIOS",
+      "item": [
+        {
+          "name": "Create Frontend Task",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    pm.environment.set('frontend_task_id', response.data.task._id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Diseñar interfaz de usuario\",\n  \"description\": \"Crear componentes React para la interfaz principal del e-commerce, incluyendo header, footer, catálogo de productos y carrito de compras\",\n  \"priority\": \"Medium\",\n  \"estimatedHours\": 32,\n  \"dueDate\": \"2024-03-01T23:59:59.000Z\",\n  \"tags\": [\"frontend\", \"react\", \"ui\", \"components\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/projects/{{new_project_id}}/tasks",
+              "host": ["{{base_url}}"],
+              "path": ["projects", "{{new_project_id}}", "tasks"]
+            }
+          }
+        },
+        {
+          "name": "Create Backend Task",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    pm.environment.set('backend_task_id', response.data.task._id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"API de gestión de productos\",\n  \"description\": \"Desarrollar endpoints REST para CRUD de productos, gestión de categorías, filtros de búsqueda y sistema de inventario\",\n  \"priority\": \"High\",\n  \"estimatedHours\": 28,\n  \"dueDate\": \"2024-02-28T23:59:59.000Z\",\n  \"tags\": [\"backend\", \"api\", \"products\", \"crud\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/projects/{{new_project_id}}/tasks",
+              "host": ["{{base_url}}"],
+              "path": ["projects", "{{new_project_id}}", "tasks"]
+            }
+          }
+        },
+        {
+          "name": "Create Database Task",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    pm.environment.set('database_task_id', response.data.task._id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Diseño de base de datos\",\n  \"description\": \"Crear esquemas de MongoDB para usuarios, productos, órdenes, inventario y sistema de pagos con las relaciones correspondientes\",\n  \"priority\": \"Critical\",\n  \"estimatedHours\": 20,\n  \"dueDate\": \"2024-02-10T23:59:59.000Z\",\n  \"tags\": [\"database\", \"mongodb\", \"schema\", \"design\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/projects/{{new_project_id}}/tasks",
+              "host": ["{{base_url}}"],
+              "path": ["projects", "{{new_project_id}}", "tasks"]
+            }
+          }
+        },
+        {
+          "name": "Test Task Validation Errors",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 400) {",
+                  "    const response = pm.response.json();",
+                  "    console.log('✅ Errores de validación capturados:', response.errors);",
+                  "} else {",
+                  "    console.log('❌ ERROR: Debería haber fallado la validación');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"AB\",\n  \"description\": \"Muy corto\",\n  \"priority\": \"InvalidPriority\",\n  \"estimatedHours\": -10,\n  \"dueDate\": \"invalid-date\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/projects/{{new_project_id}}/tasks",
+              "host": ["{{base_url}}"],
+              "path": ["projects", "{{new_project_id}}", "tasks"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📊 TASKS & COMMENTS SUMMARY",
+      "item": [
+        {
+          "name": "Complete Workflow Test",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "console.log('=== RESUMEN COMPLETO ===');",
+                  "console.log('Proyecto principal:', pm.environment.get('new_project_id'));",
+                  "console.log('Tarea principal:', pm.environment.get('new_task_id'));",
+                  "console.log('Frontend Task:', pm.environment.get('frontend_task_id'));",
+                  "console.log('Backend Task:', pm.environment.get('backend_task_id'));",
+                  "console.log('Database Task:', pm.environment.get('database_task_id'));",
+                  "console.log('Comentario:', pm.environment.get('new_comment_id'));",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    console.log('Total tareas creadas:', response.data.pagination.total);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/tasks/my-tasks",
+              "host": ["{{base_url}}"],
+              "path": ["tasks", "my-tasks"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
