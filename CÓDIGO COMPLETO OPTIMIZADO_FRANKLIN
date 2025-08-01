@@ -1,23 +1,264 @@
 // ===================================
 // FRANKLIN PEÑA - CÓDIGO COMPLETO OPTIMIZADO
-// Módulo: Categorías, Estados y Upload
+// Módulo: Infraestructura Base, Categorías, Estados y Upload
 // ===================================
 
-// src/models/Category.model.js
+// ===================================
+// 1. PACKAGE.JSON - CONFIGURACIÓN COMPLETA
+// ===================================
+{
+  "name": "project-management-api",
+  "version": "1.0.0",
+  "description": "API de gestión de proyectos y tareas con IA",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "seed": "node scripts/init-default-data.js",
+    "seed:users": "node scripts/seed-users.js",
+    "clean": "rm -rf uploads/avatars/* uploads/documents/*"
+  },
+  "keywords": ["project-management", "api", "tasks", "nodejs", "express", "mongodb"],
+  "author": "Team Developers",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "mongoose": "^7.0.0",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.0",
+    "express-validator": "^6.14.0",
+    "cors": "^2.8.5",
+    "helmet": "^6.0.0",
+    "express-rate-limit": "^6.7.0",
+    "dotenv": "^16.0.0",
+    "multer": "^1.4.5-lts.1",
+    "morgan": "^1.10.0",
+    "compression": "^1.7.4"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.20",
+    "jest": "^29.0.0",
+    "supertest": "^6.3.0"
+  },
+  "engines": {
+    "node": ">=16.0.0",
+    "npm": ">=8.0.0"
+  }
+}
+
+// ===================================
+// 2. SERVER.JS - SERVIDOR PRINCIPAL COMPLETO
+// ===================================
+const express = require('express');
+const mongoose = require('mongoose');
+const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const morgan = require('morgan');
+const compression = require('compression');
+const path = require('path');
+require('dotenv').config();
+
+const app = express();
+
+// ===================================
+// MIDDLEWARES GLOBALES
+// ===================================
+
+// Seguridad
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" }
+}));
+
+// CORS
+app.use(cors({
+  origin: process.env.FRONTEND_URL || '*',
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
+// Compresión
+app.use(compression());
+
+// Logging en desarrollo
+if (process.env.NODE_ENV === 'development') {
+  app.use(morgan('dev'));
+}
+
+// Parseo de JSON y URL
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Servir archivos estáticos
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW) * 60 * 1000 || 15 * 60 * 1000, // 15 minutos
+  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100,
+  message: {
+    success: false,
+    message: 'Demasiadas peticiones desde esta IP, intenta de nuevo más tarde',
+    retryAfter: '15 minutos'
+  },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+app.use('/api/', limiter);
+
+// ===================================
+// RUTAS
+// ===================================
+
+// Ruta de health check
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'OK',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
+
+// Rutas de API
+app.use('/api/auth', require('./src/routes/auth.routes'));
+app.use('/api/users', require('./src/routes/user.routes'));
+app.use('/api/roles', require('./src/routes/role.routes'));
+app.use('/api/categories', require('./src/routes/category.routes'));
+app.use('/api/states', require('./src/routes/state.routes'));
+app.use('/api/upload', require('./src/routes/upload.routes'));
+app.use('/api/projects', require('./src/routes/project.routes'));
+
+// Rutas que serán agregadas por otros desarrolladores
+// app.use('/api/tasks', require('./src/routes/task.routes'));        // Mariam
+// app.use('/api/comments', require('./src/routes/comment.routes'));  // Mariam
+// app.use('/api/ai', require('./src/routes/ai.routes'));             // Mariam
+
+// Ruta 404 para APIs
+app.use('/api/*', (req, res) => {
+  res.status(404).json({
+    success: false,
+    message: 'Endpoint no encontrado',
+    path: req.originalUrl
+  });
+});
+
+// Middleware global de manejo de errores
+app.use(require('./src/middlewares/error.middleware'));
+
+// ===================================
+// CONEXIÓN A BASE DE DATOS
+// ===================================
+const connectDB = async () => {
+  try {
+    const conn = await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/project_management', {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    });
+
+    console.log(`✅ MongoDB conectado: ${conn.connection.host}`);
+    
+    // Escuchar eventos de la conexión
+    mongoose.connection.on('error', err => {
+      console.error('❌ Error de MongoDB:', err);
+    });
+
+    mongoose.connection.on('disconnected', () => {
+      console.warn('⚠️ MongoDB desconectado');
+    });
+
+  } catch (error) {
+    console.error('❌ Error conectando a MongoDB:', error.message);
+    process.exit(1);
+  }
+};
+
+// ===================================
+// INICIALIZACIÓN DEL SERVIDOR
+// ===================================
+const PORT = process.env.PORT || 3000;
+
+const startServer = async () => {
+  try {
+    // Conectar a la base de datos
+    await connectDB();
+    
+    // Iniciar servidor
+    const server = app.listen(PORT, () => {
+      console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
+      console.log(`🌍 Ambiente: ${process.env.NODE_ENV || 'development'}`);
+      console.log(`📡 Health check: http://localhost:${PORT}/health`);
+      
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`📋 API Base URL: http://localhost:${PORT}/api`);
+      }
+    });
+
+    // Manejo graceful shutdown
+    process.on('SIGTERM', () => {
+      console.log('🛑 SIGTERM recibido, cerrando servidor...');
+      server.close(() => {
+        console.log('✅ Servidor cerrado');
+        mongoose.connection.close();
+        process.exit(0);
+      });
+    });
+
+    process.on('SIGINT', () => {
+      console.log('🛑 SIGINT recibido, cerrando servidor...');
+      server.close(() => {
+        console.log('✅ Servidor cerrado');
+        mongoose.connection.close();
+        process.exit(0);
+      });
+    });
+
+  } catch (error) {
+    console.error('❌ Error iniciando servidor:', error);
+    process.exit(1);
+  }
+};
+
+// Iniciar servidor
+startServer();
+
+module.exports = app;
+
+// ===================================
+// 3. src/models/Category.model.js
+// ===================================
 const mongoose = require('mongoose');
 
 const categorySchema = new mongoose.Schema({
   name: {
     type: String,
-    required: true,
+    required: [true, 'El nombre de la categoría es obligatorio'],
     unique: true,
     trim: true,
-    maxlength: 50
+    minlength: [3, 'El nombre debe tener al menos 3 caracteres'],
+    maxlength: [50, 'El nombre no puede exceder 50 caracteres']
   },
   description: {
     type: String,
-    required: true,
-    maxlength: 200
+    required: [true, 'La descripción es obligatoria'],
+    trim: true,
+    minlength: [10, 'La descripción debe tener al menos 10 caracteres'],
+    maxlength: [200, 'La descripción no puede exceder 200 caracteres']
+  },
+  color: {
+    type: String,
+    default: '#3B82F6',
+    match: [/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/, 'Debe ser un color hexadecimal válido']
+  },
+  icon: {
+    type: String,
+    default: 'folder',
+    trim: true,
+    maxlength: [30, 'El icono no puede exceder 30 caracteres']
   },
   isActive: {
     type: Boolean,
@@ -26,40 +267,112 @@ const categorySchema = new mongoose.Schema({
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true
+    required: [true, 'El creador es obligatorio']
+  },
+  projectCount: {
+    type: Number,
+    default: 0,
+    min: [0, 'El contador no puede ser negativo']
   }
 }, {
-  timestamps: true
+  timestamps: true,
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true }
 });
 
-// Índices
+// Virtual para obtener proyectos de esta categoría
+categorySchema.virtual('projects', {
+  ref: 'Project',
+  localField: '_id',
+  foreignField: 'category'
+});
+
+// Middleware pre para actualizar contador
+categorySchema.pre('save', async function(next) {
+  if (this.isNew) {
+    this.projectCount = 0;
+  }
+  next();
+});
+
+// Método para incrementar contador
+categorySchema.methods.incrementProjectCount = async function() {
+  this.projectCount += 1;
+  return this.save();
+};
+
+// Método para decrementar contador
+categorySchema.methods.decrementProjectCount = async function() {
+  if (this.projectCount > 0) {
+    this.projectCount -= 1;
+    return this.save();
+  }
+};
+
+// Índices para optimización
 categorySchema.index({ name: 1 });
 categorySchema.index({ isActive: 1 });
+categorySchema.index({ createdBy: 1 });
+categorySchema.index({ createdAt: -1 });
 
 module.exports = mongoose.model('Category', categorySchema);
 
 // ===================================
-// src/models/State.model.js
+// 4. src/models/State.model.js
 // ===================================
 const mongoose = require('mongoose');
 
 const stateSchema = new mongoose.Schema({
   name: {
     type: String,
-    required: true,
+    required: [true, 'El nombre del estado es obligatorio'],
     trim: true,
-    maxlength: 50
+    minlength: [2, 'El nombre debe tener al menos 2 caracteres'],
+    maxlength: [50, 'El nombre no puede exceder 50 caracteres']
   },
   description: {
     type: String,
-    maxlength: 200
+    trim: true,
+    maxlength: [200, 'La descripción no puede exceder 200 caracteres']
   },
   type: {
     type: String,
-    required: true,
-    enum: ['Project', 'Task']
+    required: [true, 'El tipo es obligatorio'],
+    enum: {
+      values: ['Project', 'Task'],
+      message: 'El tipo debe ser Project o Task'
+    }
+  },
+  color: {
+    type: String,
+    default: function() {
+      const colors = {
+        'Planificación': '#F59E0B',
+        'En Progreso': '#3B82F6', 
+        'En Revisión': '#8B5CF6',
+        'Completado': '#10B981',
+        'Cancelado': '#EF4444',
+        'Pendiente': '#6B7280',
+        'Bloqueada': '#DC2626'
+      };
+      return colors[this.name] || '#6B7280';
+    },
+    match: [/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/, 'Debe ser un color hexadecimal válido']
+  },
+  order: {
+    type: Number,
+    default: 0,
+    min: [0, 'El orden no puede ser negativo']
   },
   isActive: {
+    type: Boolean,
+    default: true
+  },
+  isDefault: {
+    type: Boolean,
+    default: false
+  },
+  canDelete: {
     type: Boolean,
     default: true
   }
@@ -67,66 +380,146 @@ const stateSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Índices
-stateSchema.index({ type: 1, isActive: 1 });
+// Índice compuesto para evitar duplicados por tipo
+stateSchema.index({ name: 1, type: 1 }, { unique: true });
+stateSchema.index({ type: 1, order: 1 });
+stateSchema.index({ isActive: 1 });
+
+// Método estático para obtener estados por tipo
+stateSchema.statics.getByType = function(type) {
+  return this.find({ type, isActive: true }).sort({ order: 1, createdAt: 1 });
+};
+
+// Método estático para obtener estado por defecto
+stateSchema.statics.getDefault = function(type) {
+  return this.findOne({ type, isDefault: true, isActive: true });
+};
 
 module.exports = mongoose.model('State', stateSchema);
 
 // ===================================
-// src/controllers/category.controller.js
+// 5. src/controllers/category.controller.js
 // ===================================
 const Category = require('../models/Category.model');
 const { sendResponse, sendError } = require('../utils/response.util');
+const { validationResult } = require('express-validator');
 
 class CategoryController {
-  // Listar categorías
+  // Listar categorías con filtros y paginación
   async getCategories(req, res) {
     try {
       const page = parseInt(req.query.page) || 1;
       const limit = parseInt(req.query.limit) || 10;
+      const search = req.query.search || '';
+      const sortBy = req.query.sortBy || 'name';
+      const sortOrder = req.query.sortOrder === 'desc' ? -1 : 1;
+      const includeInactive = req.query.includeInactive === 'true';
+      
       const skip = (page - 1) * limit;
 
-      const categories = await Category.find({ isActive: true })
-        .populate('createdBy', 'firstName lastName')
+      // Construir filtros
+      const filter = {};
+      if (!includeInactive) {
+        filter.isActive = true;
+      }
+      if (search) {
+        filter.$or = [
+          { name: { $regex: search, $options: 'i' } },
+          { description: { $regex: search, $options: 'i' } }
+        ];
+      }
+
+      // Construir ordenamiento
+      const sort = {};
+      sort[sortBy] = sortOrder;
+
+      const categories = await Category.find(filter)
+        .populate('createdBy', 'firstName lastName email')
         .skip(skip)
         .limit(limit)
-        .sort({ createdAt: -1 });
+        .sort(sort);
 
-      const total = await Category.countDocuments({ isActive: true });
+      const total = await Category.countDocuments(filter);
+      const totalActive = await Category.countDocuments({ isActive: true });
 
-      sendResponse(res, 200, true, 'Categorías obtenidas', {
+      sendResponse(res, 200, true, 'Categorías obtenidas exitosamente', {
         categories,
         pagination: {
           page,
           limit,
           total,
-          pages: Math.ceil(total / limit)
+          pages: Math.ceil(total / limit),
+          hasNext: page < Math.ceil(total / limit),
+          hasPrev: page > 1
+        },
+        stats: {
+          totalActive,
+          totalInactive: await Category.countDocuments({ isActive: false })
         }
       });
     } catch (error) {
-      console.error('Error categorías:', error);
+      console.error('Error obtener categorías:', error);
       sendError(res, 500, 'Error interno del servidor');
     }
   }
 
-  // Crear categoría
+  // Obtener categoría por ID
+  async getCategoryById(req, res) {
+    try {
+      const { id } = req.params;
+      
+      const category = await Category.findById(id)
+        .populate('createdBy', 'firstName lastName email')
+        .populate('projects', 'name status createdAt');
+
+      if (!category) {
+        return sendError(res, 404, 'Categoría no encontrada');
+      }
+
+      sendResponse(res, 200, true, 'Categoría obtenida', { category });
+    } catch (error) {
+      console.error('Error obtener categoría:', error);
+      if (error.name === 'CastError') {
+        return sendError(res, 400, 'ID de categoría inválido');
+      }
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Crear nueva categoría
   async createCategory(req, res) {
     try {
-      const { name, description } = req.body;
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return sendError(res, 400, 'Errores de validación', errors.array());
+      }
+
+      const { name, description, color, icon } = req.body;
+
+      // Verificar que no exista una categoría con el mismo nombre
+      const existingCategory = await Category.findOne({ 
+        name: { $regex: new RegExp(`^${name}$`, 'i') } 
+      });
+
+      if (existingCategory) {
+        return sendError(res, 400, 'Ya existe una categoría con ese nombre');
+      }
 
       const category = await Category.create({
-        name,
-        description,
+        name: name.trim(),
+        description: description.trim(),
+        color: color || '#3B82F6',
+        icon: icon || 'folder',
         createdBy: req.user.userId
       });
 
-      await category.populate('createdBy', 'firstName lastName');
+      await category.populate('createdBy', 'firstName lastName email');
 
-      sendResponse(res, 201, true, 'Categoría creada', { category });
+      sendResponse(res, 201, true, 'Categoría creada exitosamente', { category });
     } catch (error) {
       console.error('Error crear categoría:', error);
       if (error.code === 11000) {
-        return sendError(res, 400, 'La categoría ya existe');
+        return sendError(res, 400, 'Ya existe una categoría con ese nombre');
       }
       sendError(res, 500, 'Error interno del servidor');
     }
@@ -135,45 +528,149 @@ class CategoryController {
   // Actualizar categoría
   async updateCategory(req, res) {
     try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return sendError(res, 400, 'Errores de validación', errors.array());
+      }
+
       const { id } = req.params;
-      const { name, description } = req.body;
+      const { name, description, color, icon } = req.body;
 
       const category = await Category.findById(id);
-      if (!category || !category.isActive) {
+      if (!category) {
         return sendError(res, 404, 'Categoría no encontrada');
       }
 
-      const updatedCategory = await Category.findByIdAndUpdate(
-        id,
-        { name, description },
-        { new: true, runValidators: true }
-      ).populate('createdBy', 'firstName lastName');
+      if (!category.isActive) {
+        return sendError(res, 400, 'No se puede actualizar una categoría inactiva');
+      }
 
-      sendResponse(res, 200, true, 'Categoría actualizada', { category: updatedCategory });
+      // Verificar nombre único (excluyendo la categoría actual)
+      if (name && name !== category.name) {
+        const existingCategory = await Category.findOne({
+          name: { $regex: new RegExp(`^${name}$`, 'i') },
+          _id: { $ne: id }
+        });
+
+        if (existingCategory) {
+          return sendError(res, 400, 'Ya existe una categoría con ese nombre');
+        }
+      }
+
+      // Actualizar campos
+      if (name) category.name = name.trim();
+      if (description) category.description = description.trim();
+      if (color) category.color = color;
+      if (icon) category.icon = icon;
+
+      await category.save();
+      await category.populate('createdBy', 'firstName lastName email');
+
+      sendResponse(res, 200, true, 'Categoría actualizada exitosamente', { category });
     } catch (error) {
       console.error('Error actualizar categoría:', error);
+      if (error.name === 'CastError') {
+        return sendError(res, 400, 'ID de categoría inválido');
+      }
       if (error.code === 11000) {
-        return sendError(res, 400, 'El nombre ya existe');
+        return sendError(res, 400, 'Ya existe una categoría con ese nombre');
       }
       sendError(res, 500, 'Error interno del servidor');
     }
   }
 
-  // Eliminar categoría
+  // Eliminar categoría (soft delete)
   async deleteCategory(req, res) {
     try {
       const { id } = req.params;
 
       const category = await Category.findById(id);
-      if (!category || !category.isActive) {
+      if (!category) {
         return sendError(res, 404, 'Categoría no encontrada');
       }
 
-      await Category.findByIdAndUpdate(id, { isActive: false });
+      if (!category.isActive) {
+        return sendError(res, 400, 'La categoría ya está inactiva');
+      }
 
-      sendResponse(res, 200, true, 'Categoría eliminada');
+      // Verificar si tiene proyectos asociados
+      if (category.projectCount > 0) {
+        return sendError(res, 400, 'No se puede eliminar una categoría que tiene proyectos asociados');
+      }
+
+      category.isActive = false;
+      await category.save();
+
+      sendResponse(res, 200, true, 'Categoría eliminada exitosamente');
     } catch (error) {
       console.error('Error eliminar categoría:', error);
+      if (error.name === 'CastError') {
+        return sendError(res, 400, 'ID de categoría inválido');
+      }
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Restaurar categoría
+  async restoreCategory(req, res) {
+    try {
+      const { id } = req.params;
+
+      const category = await Category.findById(id);
+      if (!category) {
+        return sendError(res, 404, 'Categoría no encontrada');
+      }
+
+      if (category.isActive) {
+        return sendError(res, 400, 'La categoría ya está activa');
+      }
+
+      category.isActive = true;
+      await category.save();
+
+      sendResponse(res, 200, true, 'Categoría restaurada exitosamente', { category });
+    } catch (error) {
+      console.error('Error restaurar categoría:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Obtener estadísticas de categorías
+  async getCategoryStats(req, res) {
+    try {
+      const stats = await Category.aggregate([
+        {
+          $group: {
+            _id: null,
+            totalCategories: { $sum: 1 },
+            activeCategories: { $sum: { $cond: ['$isActive', 1, 0] } },
+            inactiveCategories: { $sum: { $cond: ['$isActive', 0, 1] } },
+            totalProjects: { $sum: '$projectCount' },
+            avgProjectsPerCategory: { $avg: '$projectCount' }
+          }
+        }
+      ]);
+
+      const result = stats[0] || {
+        totalCategories: 0,
+        activeCategories: 0,
+        inactiveCategories: 0,
+        totalProjects: 0,
+        avgProjectsPerCategory: 0
+      };
+
+      // Categorías más usadas
+      const topCategories = await Category.find({ isActive: true, projectCount: { $gt: 0 } })
+        .sort({ projectCount: -1 })
+        .limit(5)
+        .select('name projectCount color');
+
+      sendResponse(res, 200, true, 'Estadísticas obtenidas', {
+        stats: result,
+        topCategories
+      });
+    } catch (error) {
+      console.error('Error obtener estadísticas:', error);
       sendError(res, 500, 'Error interno del servidor');
     }
   }
@@ -182,76 +679,205 @@ class CategoryController {
 module.exports = new CategoryController();
 
 // ===================================
-// src/controllers/state.controller.js
+// 6. src/controllers/state.controller.js
 // ===================================
 const State = require('../models/State.model');
 const { sendResponse, sendError } = require('../utils/response.util');
+const { validationResult } = require('express-validator');
 
 class StateController {
-  // Estados para proyectos
+  // Obtener estados para proyectos
   async getProjectStates(req, res) {
     try {
-      const states = await State.find({ 
-        type: 'Project', 
-        isActive: true 
-      }).sort({ createdAt: 1 });
-
-      sendResponse(res, 200, true, 'Estados de proyecto obtenidos', { states });
+      const states = await State.getByType('Project');
+      
+      sendResponse(res, 200, true, 'Estados de proyecto obtenidos', { 
+        states,
+        count: states.length 
+      });
     } catch (error) {
-      console.error('Error estados proyecto:', error);
+      console.error('Error obtener estados proyecto:', error);
       sendError(res, 500, 'Error interno del servidor');
     }
   }
 
-  // Estados para tareas
+  // Obtener estados para tareas
   async getTaskStates(req, res) {
     try {
-      const states = await State.find({ 
-        type: 'Task', 
-        isActive: true 
-      }).sort({ createdAt: 1 });
-
-      sendResponse(res, 200, true, 'Estados de tarea obtenidos', { states });
+      const states = await State.getByType('Task');
+      
+      sendResponse(res, 200, true, 'Estados de tarea obtenidos', { 
+        states,
+        count: states.length 
+      });
     } catch (error) {
-      console.error('Error estados tarea:', error);
+      console.error('Error obtener estados tarea:', error);
       sendError(res, 500, 'Error interno del servidor');
     }
   }
 
-  // Crear estado (Admin)
+  // Obtener todos los estados con filtros
+  async getAllStates(req, res) {
+    try {
+      const { type, includeInactive } = req.query;
+      
+      const filter = {};
+      if (type) filter.type = type;
+      if (!includeInactive) filter.isActive = true;
+
+      const states = await State.find(filter).sort({ type: 1, order: 1, name: 1 });
+
+      sendResponse(res, 200, true, 'Estados obtenidos', { 
+        states,
+        count: states.length 
+      });
+    } catch (error) {
+      console.error('Error obtener estados:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Crear nuevo estado (solo Admin)
   async createState(req, res) {
     try {
-      const { name, description, type } = req.body;
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return sendError(res, 400, 'Errores de validación', errors.array());
+      }
 
-      const state = await State.create({ name, description, type });
+      const { name, description, type, color, order } = req.body;
 
-      sendResponse(res, 201, true, 'Estado creado', { state });
+      // Verificar que no exista un estado con el mismo nombre y tipo
+      const existingState = await State.findOne({ 
+        name: { $regex: new RegExp(`^${name}$`, 'i') },
+        type 
+      });
+
+      if (existingState) {
+        return sendError(res, 400, `Ya existe un estado "${name}" para ${type}`);
+      }
+
+      const state = await State.create({
+        name: name.trim(),
+        description: description ? description.trim() : undefined,
+        type,
+        color,
+        order: order || 0
+      });
+
+      sendResponse(res, 201, true, 'Estado creado exitosamente', { state });
     } catch (error) {
       console.error('Error crear estado:', error);
+      if (error.code === 11000) {
+        return sendError(res, 400, 'Ya existe un estado con ese nombre y tipo');
+      }
       sendError(res, 500, 'Error interno del servidor');
     }
   }
 
-  // Actualizar estado (Admin)
+  // Actualizar estado (solo Admin)
   async updateState(req, res) {
     try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return sendError(res, 400, 'Errores de validación', errors.array());
+      }
+
       const { id } = req.params;
-      const { name, description, type } = req.body;
+      const { name, description, color, order } = req.body;
 
       const state = await State.findById(id);
-      if (!state || !state.isActive) {
+      if (!state) {
         return sendError(res, 404, 'Estado no encontrado');
       }
 
-      const updatedState = await State.findByIdAndUpdate(
-        id,
-        { name, description, type },
-        { new: true, runValidators: true }
-      );
+      if (!state.canDelete && req.body.type) {
+        return sendError(res, 400, 'No se puede cambiar el tipo de un estado del sistema');
+      }
 
-      sendResponse(res, 200, true, 'Estado actualizado', { state: updatedState });
+      // Verificar nombre único para el mismo tipo
+      if (name && name !== state.name) {
+        const existingState = await State.findOne({
+          name: { $regex: new RegExp(`^${name}$`, 'i') },
+          type: state.type,
+          _id: { $ne: id }
+        });
+
+        if (existingState) {
+          return sendError(res, 400, `Ya existe un estado "${name}" para ${state.type}`);
+        }
+      }
+
+      // Actualizar campos
+      if (name) state.name = name.trim();
+      if (description !== undefined) state.description = description ? description.trim() : '';
+      if (color) state.color = color;
+      if (order !== undefined) state.order = order;
+
+      await state.save();
+
+      sendResponse(res, 200, true, 'Estado actualizado exitosamente', { state });
     } catch (error) {
       console.error('Error actualizar estado:', error);
+      if (error.name === 'CastError') {
+        return sendError(res, 400, 'ID de estado inválido');
+      }
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Eliminar estado (solo Admin)
+  async deleteState(req, res) {
+    try {
+      const { id } = req.params;
+
+      const state = await State.findById(id);
+      if (!state) {
+        return sendError(res, 404, 'Estado no encontrado');
+      }
+
+      if (!state.canDelete) {
+        return sendError(res, 400, 'Este estado del sistema no se puede eliminar');
+      }
+
+      if (state.isDefault) {
+        return sendError(res, 400, 'No se puede eliminar el estado por defecto');
+      }
+
+      // Verificar si está siendo usado (esto se implementaría cuando existan los modelos Project/Task)
+      // const isInUse = await checkIfStateInUse(id, state.type);
+      // if (isInUse) {
+      //   return sendError(res, 400, 'No se puede eliminar un estado que está siendo usado');
+      // }
+
+      state.isActive = false;
+      await state.save();
+
+      sendResponse(res, 200, true, 'Estado eliminado exitosamente');
+    } catch (error) {
+      console.error('Error eliminar estado:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Reordenar estados
+  async reorderStates(req, res) {
+    try {
+      const { states } = req.body; // Array de { id, order }
+
+      if (!Array.isArray(states)) {
+        return sendError(res, 400, 'El campo states debe ser un array');
+      }
+
+      const updatePromises = states.map(({ id, order }) => 
+        State.findByIdAndUpdate(id, { order }, { new: true })
+      );
+
+      await Promise.all(updatePromises);
+
+      sendResponse(res, 200, true, 'Estados reordenados exitosamente');
+    } catch (error) {
+      console.error('Error reordenar estados:', error);
       sendError(res, 500, 'Error interno del servidor');
     }
   }
@@ -260,33 +886,49 @@ class StateController {
 module.exports = new StateController();
 
 // ===================================
-// src/controllers/upload.controller.js
+// 7. src/controllers/upload.controller.js
 // ===================================
 const path = require('path');
 const fs = require('fs').promises;
 const { sendResponse, sendError } = require('../utils/response.util');
 
 class UploadController {
-  // Subir avatar
+  // Subir avatar de usuario
   async uploadAvatar(req, res) {
     try {
       if (!req.file) {
-        return sendError(res, 400, 'No se subió archivo');
+        return sendError(res, 400, 'No se seleccionó ningún archivo');
       }
 
-      const { filename, mimetype, size } = req.file;
-      const fileUrl = `/uploads/avatars/${filename}`;
+      const { filename, originalname, mimetype, size } = req.file;
+      
+      // Validar tamaño (5MB máximo)
+      if (size > 5 * 1024 * 1024) {
+        await this.deleteFile(filename, 'avatars');
+        return sendError(res, 400, 'El archivo es demasiado grande (máximo 5MB)');
+      }
 
-      sendResponse(res, 200, true, 'Avatar subido', {
+      const fileUrl = `/uploads/avatars/${filename}`;
+      const fullUrl = `${req.protocol}://${req.get('host')}${fileUrl}`;
+
+      sendResponse(res, 200, true, 'Avatar subido exitosamente', {
         file: {
           filename,
+          originalname,
           url: fileUrl,
+          fullUrl,
           mimetype,
-          size
+          size: this.formatFileSize(size)
         }
       });
     } catch (error) {
       console.error('Error subir avatar:', error);
+      
+      // Limpiar archivo si hubo error
+      if (req.file) {
+        await this.deleteFile(req.file.filename, 'avatars').catch(() => {});
+      }
+      
       sendError(res, 500, 'Error interno del servidor');
     }
   }
@@ -295,23 +937,40 @@ class UploadController {
   async uploadDocument(req, res) {
     try {
       if (!req.file) {
-        return sendError(res, 400, 'No se subió archivo');
+        return sendError(res, 400, 'No se seleccionó ningún archivo');
       }
 
       const { filename, originalname, mimetype, size } = req.file;
-      const fileUrl = `/uploads/documents/${filename}`;
+      
+      // Validar tamaño (10MB máximo para documentos)
+      if (size > 10 * 1024 * 1024) {
+        await this.deleteFile(filename, 'documents');
+        return sendError(res, 400, 'El archivo es demasiado grande (máximo 10MB)');
+      }
 
-      sendResponse(res, 200, true, 'Documento subido', {
+      const fileUrl = `/uploads/documents/${filename}`;
+      const fullUrl = `${req.protocol}://${req.get('host')}${fileUrl}`;
+
+      sendResponse(res, 200, true, 'Documento subido exitosamente', {
         file: {
           filename,
           originalname,
           url: fileUrl,
+          fullUrl,
           mimetype,
-          size
+          size: this.formatFileSize(size),
+          uploadedBy: req.user.userId,
+          uploadedAt: new Date()
         }
       });
     } catch (error) {
       console.error('Error subir documento:', error);
+      
+      // Limpiar archivo si hubo error
+      if (req.file) {
+        await this.deleteFile(req.file.filename, 'documents').catch(() => {});
+      }
+      
       sendError(res, 500, 'Error interno del servidor');
     }
   }
@@ -320,151 +979,713 @@ class UploadController {
   async deleteFile(req, res) {
     try {
       const { filename } = req.params;
-      const { type } = req.query;
+      const { type = 'documents' } = req.query;
 
-      const uploadPath = type === 'avatar' ? 'avatars' : 'documents';
-      const filePath = path.join(__dirname, '../../uploads', uploadPath, filename);
+      if (!filename) {
+        return sendError(res, 400, 'Nombre de archivo requerido');
+      }
 
-      try {
-        await fs.access(filePath);
-        await fs.unlink(filePath);
-        sendResponse(res, 200, true, 'Archivo eliminado');
-      } catch (fileError) {
+      if (!['avatars', 'documents'].includes(type)) {
+        return sendError(res, 400, 'Tipo de archivo inválido');
+      }
+
+      const deleted = await this.deleteFile(filename, type);
+      
+      if (!deleted) {
         return sendError(res, 404, 'Archivo no encontrado');
       }
+
+      sendResponse(res, 200, true, 'Archivo eliminado exitosamente');
     } catch (error) {
       console.error('Error eliminar archivo:', error);
       sendError(res, 500, 'Error interno del servidor');
     }
+  }
+
+  // Listar archivos
+  async listFiles(req, res) {
+    try {
+      const { type = 'documents' } = req.query;
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 20;
+
+      if (!['avatars', 'documents'].includes(type)) {
+        return sendError(res, 400, 'Tipo de archivo inválido');
+      }
+
+      const uploadPath = path.join(__dirname, '../../uploads', type);
+      
+      try {
+        const files = await fs.readdir(uploadPath);
+        const fileStats = await Promise.all(
+          files.map(async (filename) => {
+            const filePath = path.join(uploadPath, filename);
+            const stats = await fs.stat(filePath);
+            return {
+              filename,
+              size: this.formatFileSize(stats.size),
+              sizeBytes: stats.size,
+              created: stats.birthtime,
+              modified: stats.mtime,
+              url: `/uploads/${type}/${filename}`
+            };
+          })
+        );
+
+        // Ordenar por fecha de creación descendente
+        fileStats.sort((a, b) => new Date(b.created) - new Date(a.created));
+
+        // Paginación
+        const startIndex = (page - 1) * limit;
+        const endIndex = startIndex + limit;
+        const paginatedFiles = fileStats.slice(startIndex, endIndex);
+
+        sendResponse(res, 200, true, 'Archivos obtenidos', {
+          files: paginatedFiles,
+          pagination: {
+            page,
+            limit,
+            total: fileStats.length,
+            pages: Math.ceil(fileStats.length / limit)
+          }
+        });
+      } catch (error) {
+        if (error.code === 'ENOENT') {
+          sendResponse(res, 200, true, 'Carpeta vacía', { files: [], pagination: { page: 1, limit, total: 0, pages: 0 } });
+        } else {
+          throw error;
+        }
+      }
+    } catch (error) {
+      console.error('Error listar archivos:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Método helper para eliminar archivo físico
+  async deleteFile(filename, type) {
+    try {
+      const filePath = path.join(__dirname, '../../uploads', type, filename);
+      await fs.access(filePath);
+      await fs.unlink(filePath);
+      return true;
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        return false; // Archivo no existe
+      }
+      throw error;
+    }
+  }
+
+  // Método helper para formatear tamaño de archivo
+  formatFileSize(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   }
 }
 
 module.exports = new UploadController();
 
 // ===================================
-// src/routes/category.routes.js
+// 8. src/middlewares/validation.middleware.js
 // ===================================
-const express = require('express');
-const router = express.Router();
-const categoryController = require('../controllers/category.controller');
-const { validateCategory } = require('../validators/category.validator');
-const { authenticate } = require('../middlewares/auth.middleware');
-const { handleValidation } = require('../middlewares/validation.middleware');
+const { validationResult } = require('express-validator');
+const { sendError } = require('../utils/response.util');
 
-router.use(authenticate);
+const handleValidation = (req, res, next) => {
+  const errors = validationResult(req);
+  
+  if (!errors.isEmpty()) {
+    const formattedErrors = errors.array().map(error => ({
+      field: error.path || error.param,
+      message: error.msg,
+      value: error.value,
+      location: error.location
+    }));
 
-router.get('/', categoryController.getCategories);
-router.post('/', validateCategory, handleValidation, categoryController.createCategory);
-router.put('/:id', validateCategory, handleValidation, categoryController.updateCategory);
-router.delete('/:id', categoryController.deleteCategory);
+    return sendError(res, 400, 'Errores de validación', formattedErrors);
+  }
+  
+  next();
+};
 
-module.exports = router;
+// Middleware para validar ObjectId de MongoDB
+const validateObjectId = (paramName = 'id') => {
+  return (req, res, next) => {
+    const id = req.params[paramName];
+    
+    if (!id || !id.match(/^[0-9a-fA-F]{24}$/)) {
+      return sendError(res, 400, `ID ${paramName} inválido`);
+    }
+    
+    next();
+  };
+};
+
+// Middleware para validar paginación
+const validatePagination = (req, res, next) => {
+  const page = parseInt(req.query.page);
+  const limit = parseInt(req.query.limit);
+  
+  if (page && (isNaN(page) || page < 1)) {
+    return sendError(res, 400, 'El parámetro page debe ser un número mayor a 0');
+  }
+  
+  if (limit && (isNaN(limit) || limit < 1 || limit > 100)) {
+    return sendError(res, 400, 'El parámetro limit debe ser un número entre 1 y 100');
+  }
+  
+  next();
+};
+
+// Middleware para sanitizar entrada
+const sanitizeInput = (req, res, next) => {
+  // Eliminar campos que empiecen con $
+  const sanitizeObject = (obj) => {
+    for (const key in obj) {
+      if (key.startsWith('$')) {
+        delete obj[key];
+      } else if (typeof obj[key] === 'object' && obj[key] !== null) {
+        sanitizeObject(obj[key]);
+      }
+    }
+  };
+
+  if (req.body && typeof req.body === 'object') {
+    sanitizeObject(req.body);
+  }
+  
+  if (req.query && typeof req.query === 'object') {
+    sanitizeObject(req.query);
+  }
+  
+  next();
+};
+
+module.exports = {
+  handleValidation,
+  validateObjectId,
+  validatePagination,
+  sanitizeInput
+};
 
 // ===================================
-// src/routes/state.routes.js  
+// 9. src/middlewares/error.middleware.js
 // ===================================
-const express = require('express');
-const router = express.Router();
-const stateController = require('../controllers/state.controller');
-const { validateState } = require('../validators/state.validator');
-const { authenticate } = require('../middlewares/auth.middleware');
-const { authorize } = require('../middlewares/role.middleware');
-const { handleValidation } = require('../middlewares/validation.middleware');
+const { sendError } = require('../utils/response.util');
 
-router.use(authenticate);
+const errorHandler = (err, req, res, next) => {
+  console.error('Error Stack:', err.stack);
 
-router.get('/projects', stateController.getProjectStates);
-router.get('/tasks', stateController.getTaskStates);
-router.post('/', authorize(['Admin']), validateState, handleValidation, stateController.createState);
-router.put('/:id', authorize(['Admin']), validateState, handleValidation, stateController.updateState);
+  // Error de validación de Mongoose
+  if (err.name === 'ValidationError') {
+    const errors = Object.values(err.errors).map(error => ({
+      field: error.path,
+      message: error.message,
+      value: error.value
+    }));
+    return sendError(res, 400, 'Errores de validación', errors);
+  }
 
-module.exports = router;
+  // Error de duplicado en MongoDB
+  if (err.code === 11000) {
+    const field = Object.keys(err.keyPattern)[0];
+    const value = err.keyValue[field];
+    return sendError(res, 400, `Ya existe un registro con ${field}: ${value}`);
+  }
+
+  // Error de casting (ID inválido)
+  if (err.name === 'CastError') {
+    if (err.path === '_id') {
+      return sendError(res, 400, 'ID inválido');
+    }
+    return sendError(res, 400, `Valor inválido para ${err.path}: ${err.value}`);
+  }
+
+  // Error de JWT
+  if (err.name === 'JsonWebTokenError') {
+    return sendError(res, 401, 'Token inválido');
+  }
+
+  if (err.name === 'TokenExpiredError') {
+    return sendError(res, 401, 'Token expirado');
+  }
+
+  // Error de Multer (archivos)
+  if (err.code === 'LIMIT_FILE_SIZE') {
+    return sendError(res, 400, 'Archivo demasiado grande');
+  }
+
+  if (err.code === 'LIMIT_UNEXPECTED_FILE') {
+    return sendError(res, 400, 'Campo de archivo inesperado');
+  }
+
+  // Error de conexión a MongoDB
+  if (err.name === 'MongoNetworkError') {
+    return sendError(res, 503, 'Error de conexión a la base de datos');
+  }
+
+  // Errores personalizados
+  if (err.isOperational) {
+    return sendError(res, err.statusCode || 500, err.message);
+  }
+
+  // Error por defecto
+  const statusCode = err.statusCode || 500;
+  const message = process.env.NODE_ENV === 'production' 
+    ? 'Error interno del servidor' 
+    : err.message;
+
+  sendError(res, statusCode, message);
+};
+
+// Middleware para manejar rutas no encontradas
+const notFound = (req, res) => {
+  sendError(res, 404, `Ruta ${req.originalUrl} no encontrada`);
+};
+
+// Wrapper para funciones async
+const asyncHandler = (fn) => (req, res, next) => {
+  Promise.resolve(fn(req, res, next)).catch(next);
+};
+
+module.exports = {
+  errorHandler,
+  notFound,
+  asyncHandler
+};
 
 // ===================================
-// src/routes/upload.routes.js
-// ===================================
-const express = require('express');
-const router = express.Router();
-const uploadController = require('../controllers/upload.controller');
-const { authenticate } = require('../middlewares/auth.middleware');
-const { uploadAvatar, uploadDocument } = require('../middlewares/upload.middleware');
-
-router.use(authenticate);
-
-router.post('/avatar', uploadAvatar, uploadController.uploadAvatar);
-router.post('/document', uploadDocument, uploadController.uploadDocument);
-router.delete('/:filename', uploadController.deleteFile);
-
-module.exports = router;
-
-// ===================================
-// src/middlewares/upload.middleware.js
+// 10. src/middlewares/upload.middleware.js
 // ===================================
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { sendError } = require('../utils/response.util');
 
-// Crear directorios
-const createDirs = () => {
-  const dirs = ['uploads/avatars', 'uploads/documents'];
+// Crear directorios si no existen
+const createUploadDirs = () => {
+  const dirs = [
+    path.join(__dirname, '../../uploads'),
+    path.join(__dirname, '../../uploads/avatars'),
+    path.join(__dirname, '../../uploads/documents')
+  ];
+  
   dirs.forEach(dir => {
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
+      console.log(`📁 Directorio creado: ${dir}`);
     }
   });
 };
 
-createDirs();
+// Crear directorios al cargar el módulo
+createUploadDirs();
 
 // Configuración de storage
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const uploadPath = req.route.path.includes('avatar') 
-      ? 'uploads/avatars' 
-      : 'uploads/documents';
+    let uploadPath;
+    
+    if (req.route.path.includes('avatar')) {
+      uploadPath = path.join(__dirname, '../../uploads/avatars');
+    } else {
+      uploadPath = path.join(__dirname, '../../uploads/documents');
+    }
+    
     cb(null, uploadPath);
   },
   filename: (req, file, cb) => {
+    // Generar nombre único
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
     const extension = path.extname(file.originalname);
-    cb(null, file.fieldname + '-' + uniqueSuffix + extension);
+    const baseName = path.basename(file.originalname, extension)
+      .replace(/[^a-zA-Z0-9]/g, '_')
+      .substring(0, 20);
+    
+    const filename = `${baseName}-${uniqueSuffix}${extension}`;
+    cb(null, filename);
   }
 });
 
 // Filtro de archivos
 const fileFilter = (req, file, cb) => {
   const allowedTypes = {
-    avatar: ['image/jpeg', 'image/png', 'image/gif'],
-    document: ['image/jpeg', 'image/png', 'image/gif', 'application/pdf']
+    avatar: {
+      mimes: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
+      extensions: ['.jpg', '.jpeg', '.png', '.gif', '.webp']
+    },
+    document: {
+      mimes: [
+        'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.ms-excel',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'text/plain'
+      ],
+      extensions: ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.txt']
+    }
   };
 
-  const type = req.route.path.includes('avatar') ? 'avatar' : 'document';
+  const fileType = req.route.path.includes('avatar') ? 'avatar' : 'document';
+  const extension = path.extname(file.originalname).toLowerCase();
   
-  if (allowedTypes[type].includes(file.mimetype)) {
+  if (allowedTypes[fileType].mimes.includes(file.mimetype) && 
+      allowedTypes[fileType].extensions.includes(extension)) {
     cb(null, true);
   } else {
-    cb(new Error('Tipo de archivo no permitido'), false);
+    const allowedExts = allowedTypes[fileType].extensions.join(', ');
+    cb(new Error(`Tipo de archivo no permitido. Permitidos: ${allowedExts}`), false);
   }
 };
 
-// Configuración multer
+// Configuración de multer
 const upload = multer({
   storage,
   fileFilter,
   limits: {
-    fileSize: 5 * 1024 * 1024 // 5MB
+    fileSize: 10 * 1024 * 1024, // 10MB general
+    files: 1
   }
 });
 
 // Middlewares específicos
-const uploadAvatar = upload.single('avatar');
-const uploadDocument = upload.single('document');
+const uploadAvatar = (req, res, next) => {
+  const avatarUpload = multer({
+    storage,
+    fileFilter,
+    limits: {
+      fileSize: 5 * 1024 * 1024, // 5MB para avatares
+      files: 1
+    }
+  }).single('avatar');
 
-module.exports = { uploadAvatar, uploadDocument };
+  avatarUpload(req, res, (err) => {
+    if (err) {
+      if (err instanceof multer.MulterError) {
+        switch (err.code) {
+          case 'LIMIT_FILE_SIZE':
+            return sendError(res, 400, 'Archivo demasiado grande (máximo 5MB para avatares)');
+          case 'LIMIT_UNEXPECTED_FILE':
+            return sendError(res, 400, 'Campo de archivo inesperado');
+          default:
+            return sendError(res, 400, 'Error al subir archivo');
+        }
+      }
+      return sendError(res, 400, err.message);
+    }
+    next();
+  });
+};
+
+const uploadDocument = (req, res, next) => {
+  const documentUpload = multer({
+    storage,
+    fileFilter,
+    limits: {
+      fileSize: 10 * 1024 * 1024, // 10MB para documentos
+      files: 1
+    }
+  }).single('document');
+
+  documentUpload(req, res, (err) => {
+    if (err) {
+      if (err instanceof multer.MulterError) {
+        switch (err.code) {
+          case 'LIMIT_FILE_SIZE':
+            return sendError(res, 400, 'Archivo demasiado grande (máximo 10MB para documentos)');
+          case 'LIMIT_UNEXPECTED_FILE':
+            return sendError(res, 400, 'Campo de archivo inesperado');
+          default:
+            return sendError(res, 400, 'Error al subir archivo');
+        }
+      }
+      return sendError(res, 400, err.message);
+    }
+    next();
+  });
+};
+
+module.exports = {
+  uploadAvatar,
+  uploadDocument,
+  createUploadDirs
+};
 
 // ===================================
-// src/validators/category.validator.js
+// 11. src/utils/response.util.js
+// ===================================
+const sendResponse = (res, statusCode, success, message, data = null, meta = null) => {
+  const response = {
+    success,
+    message,
+    timestamp: new Date().toISOString(),
+    statusCode
+  };
+
+  if (data !== null) {
+    response.data = data;
+  }
+
+  if (meta !== null) {
+    response.meta = meta;
+  }
+
+  return res.status(statusCode).json(response);
+};
+
+const sendError = (res, statusCode, message, errors = null, details = null) => {
+  const response = {
+    success: false,
+    message,
+    timestamp: new Date().toISOString(),
+    statusCode
+  };
+
+  if (errors !== null) {
+    response.errors = errors;
+  }
+
+  if (details !== null) {
+    response.details = details;
+  }
+
+  // Log de errores en desarrollo
+  if (process.env.NODE_ENV === 'development') {
+    console.error(`❌ Error ${statusCode}: ${message}`, errors || '');
+  }
+
+  return res.status(statusCode).json(response);
+};
+
+const sendSuccess = (res, message, data = null) => {
+  return sendResponse(res, 200, true, message, data);
+};
+
+const sendCreated = (res, message, data = null) => {
+  return sendResponse(res, 201, true, message, data);
+};
+
+const sendNotFound = (res, message = 'Recurso no encontrado') => {
+  return sendError(res, 404, message);
+};
+
+const sendBadRequest = (res, message = 'Solicitud inválida', errors = null) => {
+  return sendError(res, 400, message, errors);
+};
+
+const sendUnauthorized = (res, message = 'No autorizado') => {
+  return sendError(res, 401, message);
+};
+
+const sendForbidden = (res, message = 'Acceso denegado') => {
+  return sendError(res, 403, message);
+};
+
+const sendInternalError = (res, message = 'Error interno del servidor') => {
+  return sendError(res, 500, message);
+};
+
+module.exports = {
+  sendResponse,
+  sendError,
+  sendSuccess,
+  sendCreated,
+  sendNotFound,
+  sendBadRequest,
+  sendUnauthorized,
+  sendForbidden,
+  sendInternalError
+};
+
+// ===================================
+// 12. src/utils/constants.js
+// ===================================
+const HTTP_STATUS = {
+  OK: 200,
+  CREATED: 201,
+  BAD_REQUEST: 400,
+  UNAUTHORIZED: 401,
+  FORBIDDEN: 403,
+  NOT_FOUND: 404,
+  CONFLICT: 409,
+  UNPROCESSABLE_ENTITY: 422,
+  INTERNAL_SERVER_ERROR: 500,
+  SERVICE_UNAVAILABLE: 503
+};
+
+const USER_ROLES = {
+  ADMIN: 'Admin',
+  PROJECT_MANAGER: 'Project Manager',
+  DEVELOPER: 'Developer',
+  VIEWER: 'Viewer'
+};
+
+const PROJECT_STATES = {
+  PLANNING: 'Planificación',
+  IN_PROGRESS: 'En Progreso',
+  IN_REVIEW: 'En Revisión',
+  COMPLETED: 'Completado',
+  CANCELLED: 'Cancelado'
+};
+
+const TASK_STATES = {
+  PENDING: 'Pendiente',
+  IN_PROGRESS: 'En Progreso',
+  IN_REVIEW: 'En Revisión',
+  COMPLETED: 'Completada',
+  BLOCKED: 'Bloqueada'
+};
+
+const PRIORITY_LEVELS = {
+  LOW: 'Low',
+  MEDIUM: 'Medium',
+  HIGH: 'High',
+  CRITICAL: 'Critical'
+};
+
+const FILE_TYPES = {
+  AVATAR: {
+    ALLOWED_MIMES: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
+    ALLOWED_EXTENSIONS: ['.jpg', '.jpeg', '.png', '.gif', '.webp'],
+    MAX_SIZE: 5 * 1024 * 1024 // 5MB
+  },
+  DOCUMENT: {
+    ALLOWED_MIMES: [
+      'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'text/plain'
+    ],
+    ALLOWED_EXTENSIONS: ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.txt'],
+    MAX_SIZE: 10 * 1024 * 1024 // 10MB
+  }
+};
+
+const REGEX_PATTERNS = {
+  EMAIL: /^\S+@\S+\.\S+$/,
+  PHONE: /^\+?[\d\s\-\(\)]+$/,
+  HEX_COLOR: /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/,
+  MONGODB_OBJECTID: /^[0-9a-fA-F]{24}$/
+};
+
+const DEFAULT_PAGINATION = {
+  PAGE: 1,
+  LIMIT: 10,
+  MAX_LIMIT: 100
+};
+
+const RATE_LIMIT = {
+  WINDOW_MS: 15 * 60 * 1000, // 15 minutos
+  MAX_REQUESTS: 100
+};
+
+const JWT_CONFIG = {
+  EXPIRE: '7d',
+  REFRESH_EXPIRE: '30d'
+};
+
+module.exports = {
+  HTTP_STATUS,
+  USER_ROLES,
+  PROJECT_STATES,
+  TASK_STATES,
+  PRIORITY_LEVELS,
+  FILE_TYPES,
+  REGEX_PATTERNS,
+  DEFAULT_PAGINATION,
+  RATE_LIMIT,
+  JWT_CONFIG
+};
+
+// ===================================
+// 13. src/routes/category.routes.js
+// ===================================
+const express = require('express');
+const router = express.Router();
+const categoryController = require('../controllers/category.controller');
+const { validateCategory } = require('../validators/category.validator');
+const { authenticate } = require('../middlewares/auth.middleware');
+const { authorize } = require('../middlewares/role.middleware');
+const { handleValidation, validateObjectId, validatePagination } = require('../middlewares/validation.middleware');
+
+// Todas las rutas requieren autenticación
+router.use(authenticate);
+
+// Rutas públicas (para miembros)
+router.get('/', validatePagination, categoryController.getCategories);
+router.get('/stats', authorize(['Admin', 'Project Manager']), categoryController.getCategoryStats);
+router.get('/:id', validateObjectId(), categoryController.getCategoryById);
+
+// Rutas que requieren permisos específicos
+router.post('/', authorize(['Admin', 'Project Manager']), validateCategory, handleValidation, categoryController.createCategory);
+router.put('/:id', authorize(['Admin', 'Project Manager']), validateObjectId(), validateCategory, handleValidation, categoryController.updateCategory);
+router.delete('/:id', authorize(['Admin']), validateObjectId(), categoryController.deleteCategory);
+router.patch('/:id/restore', authorize(['Admin']), validateObjectId(), categoryController.restoreCategory);
+
+module.exports = router;
+
+// ===================================
+// 14. src/routes/state.routes.js
+// ===================================
+const express = require('express');
+const router = express.Router();
+const stateController = require('../controllers/state.controller');
+const { validateState, validateStateOrder } = require('../validators/state.validator');
+const { authenticate } = require('../middlewares/auth.middleware');
+const { authorize } = require('../middlewares/role.middleware');
+const { handleValidation, validateObjectId } = require('../middlewares/validation.middleware');
+
+// Todas las rutas requieren autenticación
+router.use(authenticate);
+
+// Rutas públicas para obtener estados
+router.get('/projects', stateController.getProjectStates);
+router.get('/tasks', stateController.getTaskStates);
+router.get('/', stateController.getAllStates);
+
+// Rutas administrativas
+router.post('/', authorize(['Admin']), validateState, handleValidation, stateController.createState);
+router.put('/:id', authorize(['Admin']), validateObjectId(), validateState, handleValidation, stateController.updateState);
+router.delete('/:id', authorize(['Admin']), validateObjectId(), stateController.deleteState);
+router.patch('/reorder', authorize(['Admin']), validateStateOrder, handleValidation, stateController.reorderStates);
+
+module.exports = router;
+
+// ===================================
+// 15. src/routes/upload.routes.js
+// ===================================
+const express = require('express');
+const router = express.Router();
+const uploadController = require('../controllers/upload.controller');
+const { authenticate } = require('../middlewares/auth.middleware');
+const { authorize } = require('../middlewares/role.middleware');
+const { uploadAvatar, uploadDocument } = require('../middlewares/upload.middleware');
+const { validatePagination } = require('../middlewares/validation.middleware');
+
+// Todas las rutas requieren autenticación
+router.use(authenticate);
+
+// Subir archivos
+router.post('/avatar', uploadAvatar, uploadController.uploadAvatar);
+router.post('/document', uploadDocument, uploadController.uploadDocument);
+
+// Gestionar archivos
+router.get('/files', authorize(['Admin', 'Project Manager']), validatePagination, uploadController.listFiles);
+router.delete('/:filename', authorize(['Admin', 'Project Manager']), uploadController.deleteFile);
+
+module.exports = router;
+
+// ===================================
+// 16. src/validators/category.validator.js
 // ===================================
 const { body } = require('express-validator');
 
@@ -472,42 +1693,83 @@ const validateCategory = [
   body('name')
     .trim()
     .isLength({ min: 3, max: 50 })
-    .withMessage('Nombre: 3-50 caracteres'),
+    .withMessage('El nombre debe tener entre 3 y 50 caracteres')
+    .matches(/^[a-zA-ZáéíóúÁÉÍÓÚüÜñÑ\s]+$/)
+    .withMessage('El nombre solo puede contener letras y espacios'),
 
   body('description')
     .trim()
     .isLength({ min: 10, max: 200 })
-    .withMessage('Descripción: 10-200 caracteres')
+    .withMessage('La descripción debe tener entre 10 y 200 caracteres'),
+
+  body('color')
+    .optional()
+    .matches(/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/)
+    .withMessage('El color debe ser un código hexadecimal válido'),
+
+  body('icon')
+    .optional()
+    .trim()
+    .isLength({ min: 1, max: 30 })
+    .withMessage('El icono debe tener entre 1 y 30 caracteres')
+    .matches(/^[a-zA-Z0-9\-_]+$/)
+    .withMessage('El icono solo puede contener letras, números, guiones y guiones bajos')
 ];
 
 module.exports = { validateCategory };
 
 // ===================================
-// src/validators/state.validator.js
+// 17. src/validators/state.validator.js
 // ===================================
 const { body } = require('express-validator');
 
 const validateState = [
   body('name')
     .trim()
-    .isLength({ min: 3, max: 50 })
-    .withMessage('Nombre: 3-50 caracteres'),
+    .isLength({ min: 2, max: 50 })
+    .withMessage('El nombre debe tener entre 2 y 50 caracteres')
+    .matches(/^[a-zA-ZáéíóúÁÉÍÓÚüÜñÑ\s]+$/)
+    .withMessage('El nombre solo puede contener letras y espacios'),
 
   body('description')
     .optional()
     .trim()
     .isLength({ max: 200 })
-    .withMessage('Descripción: máximo 200 caracteres'),
+    .withMessage('La descripción no puede exceder 200 caracteres'),
 
   body('type')
     .isIn(['Project', 'Task'])
-    .withMessage('Tipo debe ser Project o Task')
+    .withMessage('El tipo debe ser Project o Task'),
+
+  body('color')
+    .optional()
+    .matches(/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/)
+    .withMessage('El color debe ser un código hexadecimal válido'),
+
+  body('order')
+    .optional()
+    .isInt({ min: 0 })
+    .withMessage('El orden debe ser un número entero positivo')
 ];
 
-module.exports = { validateState };
+const validateStateOrder = [
+  body('states')
+    .isArray({ min: 1 })
+    .withMessage('Debe proporcionar un array de estados'),
+
+  body('states.*.id')
+    .isMongoId()
+    .withMessage('ID de estado inválido'),
+
+  body('states.*.order')
+    .isInt({ min: 0 })
+    .withMessage('El orden debe ser un número entero positivo')
+];
+
+module.exports = { validateState, validateStateOrder };
 
 // ===================================
-// scripts/init-default-data.js
+// 18. scripts/init-default-data.js
 // ===================================
 const mongoose = require('mongoose');
 const Role = require('../src/models/Role.model');
@@ -518,82 +1780,249 @@ require('dotenv').config();
 
 const initDefaultData = async () => {
   try {
-    await mongoose.connect(process.env.MONGODB_URI);
-    console.log('Conectado a MongoDB');
+    console.log('🚀 Iniciando configuración de datos por defecto...');
+    
+    await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/project_management');
+    console.log('✅ Conectado a MongoDB');
 
-    // Crear roles por defecto
+    // ===============================
+    // CREAR ROLES POR DEFECTO
+    // ===============================
+    console.log('\n📋 Creando roles por defecto...');
     const roles = [
-      { name: 'Admin', description: 'Administrador del sistema' },
-      { name: 'Project Manager', description: 'Gestor de proyectos' },
-      { name: 'Developer', description: 'Desarrollador' },
-      { name: 'Viewer', description: 'Solo lectura' }
+      { 
+        name: 'Admin', 
+        description: 'Administrador del sistema con acceso completo'
+      },
+      { 
+        name: 'Project Manager', 
+        description: 'Gestor de proyectos con permisos de administración de proyectos'
+      },
+      { 
+        name: 'Developer', 
+        description: 'Desarrollador con permisos para trabajar en tareas'
+      },
+      { 
+        name: 'Viewer', 
+        description: 'Solo lectura, puede ver proyectos y tareas'
+      }
     ];
 
+    const createdRoles = {};
     for (const roleData of roles) {
-      const existingRole = await Role.findOne({ name: roleData.name });
-      if (!existingRole) {
-        await Role.create(roleData);
-        console.log(`✅ Rol creado: ${roleData.name}`);
+      let role = await Role.findOne({ name: roleData.name });
+      if (!role) {
+        role = await Role.create(roleData);
+        console.log(`   ✅ Rol creado: ${roleData.name}`);
+      } else {
+        console.log(`   ℹ️  Rol ya existe: ${roleData.name}`);
       }
+      createdRoles[roleData.name] = role;
     }
 
-    // Crear estados por defecto para proyectos
+    // ===============================
+    // CREAR ESTADOS PARA PROYECTOS
+    // ===============================
+    console.log('\n🔄 Creando estados para proyectos...');
     const projectStates = [
-      { name: 'Planificación', type: 'Project', description: 'Proyecto en planificación' },
-      { name: 'En Progreso', type: 'Project', description: 'Proyecto en desarrollo' },
-      { name: 'En Revisión', type: 'Project', description: 'Proyecto en revisión' },
-      { name: 'Completado', type: 'Project', description: 'Proyecto completado' },
-      { name: 'Cancelado', type: 'Project', description: 'Proyecto cancelado' }
+      { 
+        name: 'Planificación', 
+        type: 'Project', 
+        description: 'Proyecto en fase de planificación',
+        color: '#F59E0B',
+        order: 1,
+        isDefault: true
+      },
+      { 
+        name: 'En Progreso', 
+        type: 'Project', 
+        description: 'Proyecto en desarrollo activo',
+        color: '#3B82F6',
+        order: 2
+      },
+      { 
+        name: 'En Revisión', 
+        type: 'Project', 
+        description: 'Proyecto en revisión y testing',
+        color: '#8B5CF6',
+        order: 3
+      },
+      { 
+        name: 'Completado', 
+        type: 'Project', 
+        description: 'Proyecto finalizado exitosamente',
+        color: '#10B981',
+        order: 4
+      },
+      { 
+        name: 'Cancelado', 
+        type: 'Project', 
+        description: 'Proyecto cancelado o suspendido',
+        color: '#EF4444',
+        order: 5,
+        canDelete: false
+      }
     ];
 
     for (const stateData of projectStates) {
-      const existingState = await State.findOne({ 
+      let state = await State.findOne({ 
         name: stateData.name, 
         type: stateData.type 
       });
-      if (!existingState) {
-        await State.create(stateData);
-        console.log(`✅ Estado de proyecto creado: ${stateData.name}`);
+      if (!state) {
+        state = await State.create(stateData);
+        console.log(`   ✅ Estado de proyecto creado: ${stateData.name}`);
+      } else {
+        console.log(`   ℹ️  Estado ya existe: ${stateData.name}`);
       }
     }
 
-    // Crear estados por defecto para tareas
+    // ===============================
+    // CREAR ESTADOS PARA TAREAS
+    // ===============================
+    console.log('\n📋 Creando estados para tareas...');
     const taskStates = [
-      { name: 'Pendiente', type: 'Task', description: 'Tarea pendiente' },
-      { name: 'En Progreso', type: 'Task', description: 'Tarea en progreso' },
-      { name: 'En Revisión', type: 'Task', description: 'Tarea en revisión' },
-      { name: 'Completada', type: 'Task', description: 'Tarea completada' },
-      { name: 'Bloqueada', type: 'Task', description: 'Tarea bloqueada' }
+      { 
+        name: 'Pendiente', 
+        type: 'Task', 
+        description: 'Tarea pendiente de iniciar',
+        color: '#6B7280',
+        order: 1,
+        isDefault: true
+      },
+      { 
+        name: 'En Progreso', 
+        type: 'Task', 
+        description: 'Tarea en desarrollo',
+        color: '#3B82F6',
+        order: 2
+      },
+      { 
+        name: 'En Revisión', 
+        type: 'Task', 
+        description: 'Tarea en proceso de revisión',
+        color: '#8B5CF6',
+        order: 3
+      },
+      { 
+        name: 'Completada', 
+        type: 'Task', 
+        description: 'Tarea finalizada',
+        color: '#10B981',
+        order: 4
+      },
+      { 
+        name: 'Bloqueada', 
+        type: 'Task', 
+        description: 'Tarea bloqueada por dependencias',
+        color: '#DC2626',
+        order: 5
+      }
     ];
 
     for (const stateData of taskStates) {
-      const existingState = await State.findOne({ 
+      let state = await State.findOne({ 
         name: stateData.name, 
         type: stateData.type 
       });
-      if (!existingState) {
-        await State.create(stateData);
-        console.log(`✅ Estado de tarea creado: ${stateData.name}`);
+      if (!state) {
+        state = await State.create(stateData);
+        console.log(`   ✅ Estado de tarea creado: ${stateData.name}`);
+      } else {
+        console.log(`   ℹ️  Estado ya existe: ${stateData.name}`);
       }
     }
 
-    // Crear usuario admin por defecto
-    const adminRole = await Role.findOne({ name: 'Admin' });
-    const existingAdmin = await User.findOne({ email: 'admin@test.com' });
+    // ===============================
+    // CREAR USUARIO ADMINISTRADOR
+    // ===============================
+    console.log('\n👤 Creando usuario administrador...');
+    const adminRole = createdRoles['Admin'];
+    let adminUser = await User.findOne({ email: 'admin@project.com' });
     
-    if (!existingAdmin && adminRole) {
-      await User.create({
+    if (!adminUser) {
+      adminUser = await User.create({
         firstName: 'Admin',
-        lastName: 'User',
-        email: 'admin@test.com',
-        password: 'admin123',
+        lastName: 'System',
+        email: 'admin@project.com',
+        password: 'admin123456', // Se hasheará automáticamente
         globalRole: adminRole._id,
         isEmailVerified: true
       });
-      console.log('✅ Usuario admin creado (admin@test.com / admin123)');
+      console.log('   ✅ Usuario admin creado:');
+      console.log('   📧 Email: admin@project.com');
+      console.log('   🔒 Password: admin123456');
+    } else {
+      console.log('   ℹ️  Usuario admin ya existe');
     }
 
-    console.log('🎉 Datos por defecto inicializados');
+    // ===============================
+    // CREAR CATEGORÍAS POR DEFECTO
+    // ===============================
+    console.log('\n🏷️  Creando categorías por defecto...');
+    const categories = [
+      {
+        name: 'Desarrollo Web',
+        description: 'Proyectos de desarrollo de aplicaciones web',
+        color: '#3B82F6',
+        icon: 'globe'
+      },
+      {
+        name: 'Aplicaciones Móviles',
+        description: 'Desarrollo de aplicaciones para dispositivos móviles',
+        color: '#10B981',
+        icon: 'smartphone'
+      },
+      {
+        name: 'DevOps',
+        description: 'Proyectos de infraestructura y despliegue',
+        color: '#8B5CF6',
+        icon: 'server'
+      },
+      {
+        name: 'Diseño UI/UX',
+        description: 'Proyectos de diseño de interfaces y experiencia de usuario',
+        color: '#F59E0B',
+        icon: 'palette'
+      },
+      {
+        name: 'Marketing Digital',
+        description: 'Campañas y estrategias de marketing digital',
+        color: '#EF4444',
+        icon: 'megaphone'
+      }
+    ];
+
+    for (const categoryData of categories) {
+      let category = await Category.findOne({ name: categoryData.name });
+      if (!category) {
+        category = await Category.create({
+          ...categoryData,
+          createdBy: adminUser._id
+        });
+        console.log(`   ✅ Categoría creada: ${categoryData.name}`);
+      } else {
+        console.log(`   ℹ️  Categoría ya existe: ${categoryData.name}`);
+      }
+    }
+
+    // ===============================
+    // RESUMEN FINAL
+    // ===============================
+    console.log('\n🎉 ¡Configuración completada exitosamente!');
+    console.log('\n📊 Resumen de datos creados:');
+    console.log(`   👥 Roles: ${roles.length}`);
+    console.log(`   🔄 Estados de proyecto: ${projectStates.length}`);
+    console.log(`   📋 Estados de tarea: ${taskStates.length}`);
+    console.log(`   🏷️  Categorías: ${categories.length}`);
+    console.log(`   👤 Usuario admin: 1`);
+    
+    console.log('\n🔐 Credenciales de acceso:');
+    console.log('   📧 Email: admin@project.com');
+    console.log('   🔒 Password: admin123456');
+    
+    console.log('\n🚀 El sistema está listo para usar!');
+    
     process.exit(0);
   } catch (error) {
     console.error('❌ Error inicializando datos:', error);
@@ -601,6 +2030,7 @@ const initDefaultData = async () => {
   }
 };
 
+// Ejecutar si es llamado directamente
 if (require.main === module) {
   initDefaultData();
 }
@@ -608,68 +2038,103 @@ if (require.main === module) {
 module.exports = initDefaultData;
 
 // ===================================
-// Instrucciones de uso para Franklin
+// 19. .env.example - ACTUALIZADO
+// ===================================
+# Server Configuration
+PORT=3000
+NODE_ENV=development
+FRONTEND_URL=http://localhost:3000
+
+# Database
+MONGODB_URI=mongodb://localhost:27017/project_management
+
+# JWT Configuration
+JWT_SECRET=your_super_secret_jwt_key_change_in_production
+JWT_EXPIRE=7d
+JWT_REFRESH_SECRET=your_refresh_secret_key
+JWT_REFRESH_EXPIRE=30d
+
+# Email Configuration (opcional)
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_USER=your_email@gmail.com
+EMAIL_PASS=your_app_password
+
+# Upload Configuration
+MAX_FILE_SIZE=10485760
+ALLOWED_FILE_TYPES=image/jpeg,image/png,image/gif,application/pdf
+
+# Rate Limiting
+RATE_LIMIT_WINDOW=15
+RATE_LIMIT_MAX_REQUESTS=100
+
+# AI Configuration (para Mariam)
+DEEPSEEK_API_KEY=sk-your_deepseek_api_key_here
+
+// ===================================
+// 20. COMANDOS E INSTRUCCIONES PARA FRANKLIN
 // ===================================
 
 /*
-INSTRUCCIONES PARA FRANKLIN PEÑA:
+====================================
+INSTRUCCIONES COMPLETAS PARA FRANKLIN PEÑA
+====================================
 
 1. SETUP INICIAL:
-   - Esperar que Samuel complete la base (server.js, auth, users)
-   - Instalar dependencia: npm install multer
-   - Crear carpetas: mkdir -p uploads/avatars uploads/documents
+npm install express mongoose bcryptjs jsonwebtoken express-validator cors helmet express-rate-limit dotenv multer morgan compression
 
-2. ARCHIVOS A CREAR:
-   - Todos los archivos mostrados arriba
-   - Ejecutar: node scripts/init-default-data.js (para datos iniciales)
+2. CREAR ESTRUCTURA DE CARPETAS:
+mkdir -p src/{config,controllers,middlewares,models,routes,utils,validators}
+mkdir -p uploads/{avatars,documents}
+mkdir -p tests scripts
 
-3. PRUEBAS:
-   - GET /api/categories (listar categorías)
-   - POST /api/categories (crear categoría)
-   - GET /api/states/projects (estados de proyecto)
-   - GET /api/states/tasks (estados de tarea)
-   - POST /api/upload/avatar (subir avatar)
-   - POST /api/upload/document (subir documento)
+3. CREAR ARCHIVOS (copiar código de arriba):
+- package.json
+- server.js
+- src/models/Category.model.js
+- src/models/State.model.js
+- src/controllers/category.controller.js
+- src/controllers/state.controller.js
+- src/controllers/upload.controller.js
+- src/middlewares/validation.middleware.js
+- src/middlewares/error.middleware.js
+- src/middlewares/upload.middleware.js
+- src/utils/response.util.js
+- src/utils/constants.js
+- src/routes/category.routes.js
+- src/routes/state.routes.js
+- src/routes/upload.routes.js
+- src/validators/category.validator.js
+- src/validators/state.validator.js
+- scripts/init-default-data.js
+- .env.example
 
-4. ENDPOINTS PRINCIPALES:
-   Categories:
-   - GET /api/categories
-   - POST /api/categories
-   - PUT /api/categories/:id
-   - DELETE /api/categories/:id
+4. CONFIGURAR .env:
+cp .env.example .env
+# Editar .env con tus valores
 
-   States:
-   - GET /api/states/projects
-   - GET /api/states/tasks
-   - POST /api/states (Admin)
-   - PUT /api/states/:id (Admin)
+5. EJECUTAR SETUP:
+npm run seed
 
-   Upload:
-   - POST /api/upload/avatar
-   - POST /api/upload/document
-   - DELETE /api/upload/:filename
+6. INICIAR SERVIDOR:
+npm run dev
 
-5. DEPENDENCIAS:
-   - multer (para upload)
-   - express-validator (para validaciones)
+7. PROBAR ENDPOINTS:
+GET  http://localhost:3000/health
+GET  http://localhost:3000/api/categories
+GET  http://localhost:3000/api/states/projects
+POST http://localhost:3000/api/upload/avatar
 
-6. VALIDACIONES IMPLEMENTADAS:
-   - Categorías: nombre y descripción obligatorios
-   - Estados: nombre y tipo obligatorios
-   - Upload: tipo de archivo y tamaño
+8. DEPENDENCIAS DE OTROS:
+- Samuel debe completar: User.model.js, auth.middleware.js, role.middleware.js
+- Después agregar las rutas de Samuel en server.js
 
-7. NOTAS IMPORTANTES:
-   - Los uploads se guardan en uploads/avatars y uploads/documents
-   - Las categorías requieren usuario autenticado para crearlas
-   - Solo Admin puede crear/editar estados
-   - Archivos permitidos: imágenes (avatar) y PDF (documentos)
-   - Tamaño máximo: 5MB
+9. ORDEN DE CREACIÓN:
+Día 1: package.json, server.js, response.util.js
+Día 2: Modelos (Category, State)  
+Día 3: Controladores (category, state, upload)
+Día 4: Middlewares (validation, error, upload)
+Día 5: Rutas, validadores, script inicialización
 
-8. ORDEN DE TRABAJO:
-   Semana 2: Después que Samuel complete autenticación
-   - Día 1-2: Modelos y controladores
-   - Día 3-4: Upload y middleware
-   - Día 5: Script de inicialización y pruebas
-
-¡LISTO PARA DESARROLLAR! 🚀
+¡PROYECTO BASE COMPLETO PARA FRANKLIN! 🚀
 */
