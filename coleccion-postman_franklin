@@ -1,0 +1,532 @@
+{
+  "info": {
+    "name": "Franklin Peña - Categories, States & Upload",
+    "description": "Endpoints de categorías, estados y subida de archivos",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{auth_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "{{base_url}}"
+    }
+  ],
+  "item": [
+    {
+      "name": "📂 CATEGORIES",
+      "item": [
+        {
+          "name": "Get All Categories",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data.categories.length > 0) {",
+                  "        pm.environment.set('category_id', response.data.categories[0]._id);",
+                  "        console.log('Category ID guardado:', response.data.categories[0]._id);",
+                  "    }",
+                  "    console.log('Total categorías:', response.data.pagination.total);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/categories?page=1&limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["categories"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Category",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    pm.environment.set('new_category_id', response.data.category._id);",
+                  "    console.log('Nueva categoría creada:', response.data.category.name);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Desarrollo Web\",\n  \"description\": \"Proyectos de desarrollo web frontend y backend con tecnologías modernas\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/categories",
+              "host": ["{{base_url}}"],
+              "path": ["categories"]
+            }
+          }
+        },
+        {
+          "name": "Update Category",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Desarrollo Web Avanzado\",\n  \"description\": \"Proyectos de desarrollo web con tecnologías avanzadas y arquitecturas modernas\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/categories/{{new_category_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["categories", "{{new_category_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete Category",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/categories/{{new_category_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["categories", "{{new_category_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Create Mobile Category",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    pm.environment.set('mobile_category_id', response.data.category._id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Desarrollo Mobile\",\n  \"description\": \"Aplicaciones móviles para iOS y Android\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/categories",
+              "host": ["{{base_url}}"],
+              "path": ["categories"]
+            }
+          }
+        },
+        {
+          "name": "Create DevOps Category",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    pm.environment.set('devops_category_id', response.data.category._id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"DevOps\",\n  \"description\": \"Infraestructura, CI/CD y deployment\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/categories",
+              "host": ["{{base_url}}"],
+              "path": ["categories"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🔄 STATES",
+      "item": [
+        {
+          "name": "Get Project States",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data.states.length > 0) {",
+                  "        pm.environment.set('project_state_id', response.data.states[0]._id);",
+                  "        console.log('Project State ID guardado:', response.data.states[0]._id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/states/projects",
+              "host": ["{{base_url}}"],
+              "path": ["states", "projects"]
+            }
+          }
+        },
+        {
+          "name": "Get Task States",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data.states.length > 0) {",
+                  "        pm.environment.set('task_state_id', response.data.states[0]._id);",
+                  "        console.log('Task State ID guardado:', response.data.states[0]._id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/states/tasks",
+              "host": ["{{base_url}}"],
+              "path": ["states", "tasks"]
+            }
+          }
+        },
+        {
+          "name": "Create Project State (Admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    pm.environment.set('new_project_state_id', response.data.state._id);",
+                  "    console.log('Nuevo estado de proyecto creado:', response.data.state.name);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"En Desarrollo\",\n  \"description\": \"Proyecto en fase de desarrollo activo\",\n  \"type\": \"Project\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/states",
+              "host": ["{{base_url}}"],
+              "path": ["states"]
+            }
+          }
+        },
+        {
+          "name": "Create Task State (Admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    pm.environment.set('new_task_state_id', response.data.state._id);",
+                  "    console.log('Nuevo estado de tarea creado:', response.data.state.name);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"En Testing\",\n  \"description\": \"Tarea en fase de pruebas\",\n  \"type\": \"Task\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/states",
+              "host": ["{{base_url}}"],
+              "path": ["states"]
+            }
+          }
+        },
+        {
+          "name": "Update State (Admin)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"En Testing Avanzado\",\n  \"description\": \"Tarea en fase de pruebas avanzadas y QA\",\n  \"type\": \"Task\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/states/{{new_task_state_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["states", "{{new_task_state_id}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📁 UPLOAD",
+      "item": [
+        {
+          "name": "Upload Avatar",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    pm.environment.set('avatar_url', response.data.file.url);",
+                  "    console.log('Avatar subido:', response.data.file.filename);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "avatar",
+                  "type": "file",
+                  "src": "",
+                  "description": "Selecciona una imagen (JPG, PNG, GIF)"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/upload/avatar",
+              "host": ["{{base_url}}"],
+              "path": ["upload", "avatar"]
+            }
+          }
+        },
+        {
+          "name": "Upload Document",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    pm.environment.set('document_url', response.data.file.url);",
+                  "    pm.environment.set('document_filename', response.data.file.filename);",
+                  "    console.log('Documento subido:', response.data.file.originalname);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "document",
+                  "type": "file",
+                  "src": "",
+                  "description": "Selecciona un documento (PDF, DOC, IMG)"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/upload/document",
+              "host": ["{{base_url}}"],
+              "path": ["upload", "document"]
+            }
+          }
+        },
+        {
+          "name": "Delete File",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/upload/{{document_filename}}?type=document",
+              "host": ["{{base_url}}"],
+              "path": ["upload", "{{document_filename}}"],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "document",
+                  "description": "Tipo: avatar o document"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🧪 TESTING HELPERS",
+      "item": [
+        {
+          "name": "Create Test Data - All Categories",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Este request crea todas las categorías de prueba",
+                  "console.log('Creando categorías de prueba...');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Testing\",\n  \"description\": \"Categoría para pruebas y testing del sistema\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/categories",
+              "host": ["{{base_url}}"],
+              "path": ["categories"]
+            }
+          }
+        },
+        {
+          "name": "Get All Data Summary",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "console.log('=== RESUMEN DE DATOS ===');",
+                  "console.log('Categories:', pm.environment.get('category_id'));",
+                  "console.log('Project States:', pm.environment.get('project_state_id'));",
+                  "console.log('Task States:', pm.environment.get('task_state_id'));",
+                  "console.log('Avatar URL:', pm.environment.get('avatar_url'));",
+                  "console.log('Document URL:', pm.environment.get('document_url'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/categories",
+              "host": ["{{base_url}}"],
+              "path": ["categories"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
