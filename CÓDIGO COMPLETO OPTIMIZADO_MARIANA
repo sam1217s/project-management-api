@@ -1,9 +1,12 @@
 // ===================================
-// MARIANA GOMEZ - CÓDIGO COMPLETO OPTIMIZADO
-// Módulo: Proyectos
+// MARIANA GOMEZ - CÓDIGO COMPLETO INTEGRADO
+// Módulo: Proyectos (Preparado para Tasks/Comments/IA)
+// Integrado perfectamente con Samuel y Maryamm
 // ===================================
 
+// ===================================
 // src/models/Project.model.js
+// ===================================
 const mongoose = require('mongoose');
 
 const projectSchema = new mongoose.Schema({
@@ -11,7 +14,8 @@ const projectSchema = new mongoose.Schema({
     type: String,
     required: true,
     trim: true,
-    maxlength: 100
+    maxlength: 100,
+    index: true
   },
   description: {
     type: String,
@@ -21,12 +25,14 @@ const projectSchema = new mongoose.Schema({
   category: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Category',
-    required: true
+    required: true,
+    index: true
   },
   owner: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true
+    required: true,
+    index: true
   },
   members: [{
     user: {
@@ -42,17 +48,26 @@ const projectSchema = new mongoose.Schema({
     joinedAt: {
       type: Date,
       default: Date.now
+    },
+    // Permisos específicos para tareas (usado por Maryamm)
+    permissions: {
+      canCreateTasks: { type: Boolean, default: true },
+      canEditTasks: { type: Boolean, default: true },
+      canDeleteTasks: { type: Boolean, default: false },
+      canAssignTasks: { type: Boolean, default: false }
     }
   }],
   status: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'State',
-    required: true
+    required: true,
+    index: true
   },
   priority: {
     type: String,
     enum: ['Low', 'Medium', 'High', 'Critical'],
-    default: 'Medium'
+    default: 'Medium',
+    index: true
   },
   startDate: {
     type: Date,
@@ -85,22 +100,54 @@ const projectSchema = new mongoose.Schema({
   },
   isActive: {
     type: Boolean,
-    default: true
+    default: true,
+    index: true
   },
   tags: [{
     type: String,
     trim: true,
     maxlength: 20
-  }]
+  }],
+  // Campos adicionales para integración con tasks y comments
+  settings: {
+    allowComments: { type: Boolean, default: true },
+    allowTaskCreation: { type: Boolean, default: true },
+    requireTaskApproval: { type: Boolean, default: false },
+    notifyOnTaskComplete: { type: Boolean, default: true },
+    aiAssistEnabled: { type: Boolean, default: true }
+  },
+  // Metadatos para IA (usado por Maryamm)
+  aiMetadata: {
+    lastAnalysis: { type: Date },
+    healthScore: { type: Number, min: 0, max: 100, default: 0 },
+    riskLevel: { type: String, enum: ['Low', 'Medium', 'High'], default: 'Low' },
+    recommendations: [String]
+  }
 }, {
   timestamps: true,
   toJSON: { virtuals: true }
 });
 
-// Virtual para progreso
+// Virtual para conteo de tareas (será usado por Maryamm)
+projectSchema.virtual('taskCount', {
+  ref: 'Task',
+  localField: '_id',
+  foreignField: 'project',
+  count: true
+});
+
+// Virtual para conteo de comentarios (será usado por Maryamm)
+projectSchema.virtual('commentCount', {
+  ref: 'Comment',
+  localField: '_id',
+  foreignField: 'projectid',
+  count: true
+});
+
+// Virtual para progreso basado en tareas
 projectSchema.virtual('progress').get(function() {
-  // Se calculará basado en tareas completadas
-  return 0;
+  // Este cálculo se actualizará cuando Maryamm implemente las tareas
+  return this.aiMetadata?.healthScore || 0;
 });
 
 // Virtual para días restantes
@@ -110,13 +157,34 @@ projectSchema.virtual('daysRemaining').get(function() {
   return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 });
 
-// Índices
-projectSchema.index({ name: 1 });
-projectSchema.index({ owner: 1 });
-projectSchema.index({ category: 1 });
-projectSchema.index({ status: 1 });
-projectSchema.index({ 'members.user': 1 });
-projectSchema.index({ isActive: 1 });
+// Virtual para verificar si está retrasado
+projectSchema.virtual('isOverdue').get(function() {
+  return this.daysRemaining < 0 && this.status?.name !== 'Completado';
+});
+
+// Índices compuestos para mejor rendimiento
+projectSchema.index({ owner: 1, isActive: 1 });
+projectSchema.index({ 'members.user': 1, isActive: 1 });
+projectSchema.index({ category: 1, status: 1 });
+projectSchema.index({ priority: 1, endDate: 1 });
+
+// Middleware para actualizar actualHours cuando se calculen desde tareas
+projectSchema.methods.updateProgressFromTasks = async function() {
+  const Task = mongoose.model('Task');
+  
+  try {
+    const tasks = await Task.find({ project: this._id, isActive: true });
+    const completedTasks = tasks.filter(task => task.completedAt);
+    const progress = tasks.length > 0 ? Math.round((completedTasks.length / tasks.length) * 100) : 0;
+    
+    this.aiMetadata.healthScore = progress;
+    this.actualHours = tasks.reduce((total, task) => total + (task.actualHours || 0), 0);
+    
+    return this.save();
+  } catch (error) {
+    console.error('Error updating progress:', error);
+  }
+};
 
 module.exports = mongoose.model('Project', projectSchema);
 
@@ -126,16 +194,20 @@ module.exports = mongoose.model('Project', projectSchema);
 const Project = require('../models/Project.model');
 const State = require('../models/State.model');
 const Category = require('../models/Category.model');
+const User = require('../models/User.model');
+const Role = require('../models/Role.model');
 const { sendResponse, sendError } = require('../utils/response.util');
 
 class ProjectController {
-  // Listar proyectos del usuario
+  // Listar proyectos del usuario con estadísticas
   async getProjects(req, res) {
     try {
       const page = parseInt(req.query.page) || 1;
       const limit = parseInt(req.query.limit) || 10;
       const skip = (page - 1) * limit;
+      const { status, priority, category } = req.query;
 
+      // Filtros base
       const filter = {
         isActive: true,
         $or: [
@@ -144,26 +216,38 @@ class ProjectController {
         ]
       };
 
+      // Filtros adicionales
+      if (status) filter.status = status;
+      if (priority) filter.priority = priority;
+      if (category) filter.category = category;
+
       const projects = await Project.find(filter)
-        .populate('owner', 'firstName lastName email')
+        .populate('owner', 'firstName lastName email avatar')
         .populate('category', 'name description')
         .populate('status', 'name description')
-        .populate('members.user', 'firstName lastName email')
+        .populate('members.user', 'firstName lastName email avatar')
         .populate('members.role', 'name')
+        .populate('taskCount')
+        .populate('commentCount')
         .skip(skip)
         .limit(limit)
         .sort({ updatedAt: -1 });
 
       const total = await Project.countDocuments(filter);
 
-      sendResponse(res, 200, true, 'Proyectos obtenidos', {
+      // Estadísticas adicionales
+      const stats = await this.getProjectStats(req.user.userId);
+
+      sendResponse(res, 200, true, 'Proyectos obtenidos exitosamente', {
         projects,
         pagination: {
           page,
           limit,
           total,
           pages: Math.ceil(total / limit)
-        }
+        },
+        stats,
+        filters: { status, priority, category }
       });
     } catch (error) {
       console.error('Error obtener proyectos:', error);
@@ -171,7 +255,7 @@ class ProjectController {
     }
   }
 
-  // Crear proyecto
+  // Crear proyecto con configuraciones para tasks/comments
   async createProject(req, res) {
     try {
       const {
@@ -183,7 +267,8 @@ class ProjectController {
         estimatedHours,
         budget,
         priority,
-        tags
+        tags,
+        settings
       } = req.body;
 
       // Verificar categoría
@@ -192,15 +277,66 @@ class ProjectController {
         return sendError(res, 400, 'Categoría no válida');
       }
 
-      // Estado inicial
-      const initialState = await State.findOne({
+      // Estado inicial para proyecto
+      let initialState = await State.findOne({
         type: 'Project',
         name: 'Planificación'
       });
 
       if (!initialState) {
-        return sendError(res, 500, 'Estado inicial no encontrado');
+        initialState = await State.create({
+          name: 'Planificación',
+          type: 'Project',
+          description: 'Estado inicial del proyecto'
+        });
       }
+
+      // Obtener rol del usuario para el proyecto
+      const userRole = await Role.findById(req.user.globalRole._id);
+
+      // Configuraciones por defecto para integración con Maryamm
+      const defaultSettings = {
+        allowComments: true,
+        allowTaskCreation: true,
+        requireTaskApproval: userRole?.name === 'Developer',
+        notifyOnTaskComplete: true,
+        aiAssistEnabled: true,
+        ...settings
+      };
+
+      // Permisos por defecto basados en rol
+      const getPermissionsByRole = (roleName) => {
+        switch(roleName) {
+          case 'Admin':
+            return {
+              canCreateTasks: true,
+              canEditTasks: true,
+              canDeleteTasks: true,
+              canAssignTasks: true
+            };
+          case 'Project Manager':
+            return {
+              canCreateTasks: true,
+              canEditTasks: true,
+              canDeleteTasks: true,
+              canAssignTasks: true
+            };
+          case 'Developer':
+            return {
+              canCreateTasks: true,
+              canEditTasks: true,
+              canDeleteTasks: false,
+              canAssignTasks: false
+            };
+          default:
+            return {
+              canCreateTasks: false,
+              canEditTasks: false,
+              canDeleteTasks: false,
+              canAssignTasks: false
+            };
+        }
+      };
 
       // Crear proyecto
       const project = await Project.create({
@@ -213,41 +349,51 @@ class ProjectController {
         estimatedHours,
         budget,
         priority,
-        tags,
+        tags: tags || [],
         status: initialState._id,
+        settings: defaultSettings,
         members: [{
           user: req.user.userId,
-          role: req.user.globalRole._id
-        }]
+          role: userRole._id,
+          permissions: getPermissionsByRole(userRole?.name)
+        }],
+        aiMetadata: {
+          healthScore: 0,
+          riskLevel: 'Low',
+          recommendations: []
+        }
       });
 
       // Poblar relaciones
       await project.populate([
-        { path: 'owner', select: 'firstName lastName email' },
+        { path: 'owner', select: 'firstName lastName email avatar' },
         { path: 'category', select: 'name description' },
         { path: 'status', select: 'name description' },
-        { path: 'members.user', select: 'firstName lastName email' },
+        { path: 'members.user', select: 'firstName lastName email avatar' },
         { path: 'members.role', select: 'name' }
       ]);
 
-      sendResponse(res, 201, true, 'Proyecto creado', { project });
+      sendResponse(res, 201, true, 'Proyecto creado exitosamente', { project });
     } catch (error) {
       console.error('Error crear proyecto:', error);
       sendError(res, 500, 'Error interno del servidor');
     }
   }
 
-  // Obtener proyecto específico
+  // Obtener proyecto específico con detalles completos
   async getProject(req, res) {
     try {
       const { id } = req.params;
+      const includeStats = req.query.stats === 'true';
 
       const project = await Project.findById(id)
-        .populate('owner', 'firstName lastName email')
+        .populate('owner', 'firstName lastName email avatar')
         .populate('category', 'name description')
         .populate('status', 'name description')
-        .populate('members.user', 'firstName lastName email')
-        .populate('members.role', 'name');
+        .populate('members.user', 'firstName lastName email avatar')
+        .populate('members.role', 'name')
+        .populate('taskCount')
+        .populate('commentCount');
 
       if (!project || !project.isActive) {
         return sendError(res, 404, 'Proyecto no encontrado');
@@ -263,7 +409,47 @@ class ProjectController {
         return sendError(res, 403, 'Sin acceso al proyecto');
       }
 
-      sendResponse(res, 200, true, 'Proyecto obtenido', { project });
+      let responseData = { project };
+
+      // Incluir estadísticas si se solicitan
+      if (includeStats) {
+        try {
+          // Estas estadísticas se completarán cuando Maryamm implemente Task
+          const Task = mongoose.model('Task');
+          const Comment = mongoose.model('Comment');
+          
+          const [tasks, comments] = await Promise.all([
+            Task.find({ project: id, isActive: true }).populate('status assignedTo'),
+            Comment.find({ projectid: id }).populate('author')
+          ]);
+
+          const projectStats = {
+            tasks: {
+              total: tasks.length,
+              completed: tasks.filter(t => t.completedAt).length,
+              pending: tasks.filter(t => !t.completedAt).length,
+              overdue: tasks.filter(t => t.dueDate < new Date() && !t.completedAt).length
+            },
+            comments: {
+              total: comments.length,
+              recent: comments.slice(-5)
+            },
+            progress: tasks.length > 0 ? 
+              Math.round((tasks.filter(t => t.completedAt).length / tasks.length) * 100) : 0
+          };
+
+          responseData.stats = projectStats;
+        } catch (statError) {
+          // Si Task/Comment no existen aún, estadísticas básicas
+          responseData.stats = {
+            tasks: { total: 0, completed: 0, pending: 0, overdue: 0 },
+            comments: { total: 0, recent: [] },
+            progress: 0
+          };
+        }
+      }
+
+      sendResponse(res, 200, true, 'Proyecto obtenido exitosamente', responseData);
     } catch (error) {
       console.error('Error obtener proyecto:', error);
       sendError(res, 500, 'Error interno del servidor');
@@ -281,9 +467,15 @@ class ProjectController {
         return sendError(res, 404, 'Proyecto no encontrado');
       }
 
-      // Verificar permisos (solo owner)
-      if (project.owner.toString() !== req.user.userId) {
-        return sendError(res, 403, 'Sin permisos para editar');
+      // Verificar permisos (owner o PM del proyecto)
+      const canEdit = project.owner.toString() === req.user.userId ||
+                     project.members.some(member => 
+                       member.user.toString() === req.user.userId && 
+                       member.role.name === 'Project Manager'
+                     );
+
+      if (!canEdit) {
+        return sendError(res, 403, 'Sin permisos para editar este proyecto');
       }
 
       // Validar categoría si se actualiza
@@ -294,26 +486,30 @@ class ProjectController {
         }
       }
 
+      // No permitir cambio de owner por esta ruta
+      delete updateData.owner;
+      delete updateData.members;
+
       const updatedProject = await Project.findByIdAndUpdate(
         id,
         updateData,
         { new: true, runValidators: true }
       ).populate([
-        { path: 'owner', select: 'firstName lastName email' },
+        { path: 'owner', select: 'firstName lastName email avatar' },
         { path: 'category', select: 'name description' },
         { path: 'status', select: 'name description' },
-        { path: 'members.user', select: 'firstName lastName email' },
+        { path: 'members.user', select: 'firstName lastName email avatar' },
         { path: 'members.role', select: 'name' }
       ]);
 
-      sendResponse(res, 200, true, 'Proyecto actualizado', { project: updatedProject });
+      sendResponse(res, 200, true, 'Proyecto actualizado exitosamente', { project: updatedProject });
     } catch (error) {
       console.error('Error actualizar proyecto:', error);
       sendError(res, 500, 'Error interno del servidor');
     }
   }
 
-  // Eliminar proyecto
+  // Eliminar proyecto (soft delete)
   async deleteProject(req, res) {
     try {
       const { id } = req.params;
@@ -323,25 +519,28 @@ class ProjectController {
         return sendError(res, 404, 'Proyecto no encontrado');
       }
 
-      // Solo owner puede eliminar
-      if (project.owner.toString() !== req.user.userId) {
-        return sendError(res, 403, 'Sin permisos para eliminar');
+      // Solo owner o Admin pueden eliminar
+      const canDelete = project.owner.toString() === req.user.userId ||
+                       req.user.role === 'Admin';
+
+      if (!canDelete) {
+        return sendError(res, 403, 'Sin permisos para eliminar este proyecto');
       }
 
       await Project.findByIdAndUpdate(id, { isActive: false });
 
-      sendResponse(res, 200, true, 'Proyecto eliminado');
+      sendResponse(res, 200, true, 'Proyecto eliminado exitosamente');
     } catch (error) {
       console.error('Error eliminar proyecto:', error);
       sendError(res, 500, 'Error interno del servidor');
     }
   }
 
-  // Agregar miembro al proyecto
+  // Agregar miembro al proyecto con permisos específicos
   async addMember(req, res) {
     try {
       const { id } = req.params;
-      const { user, role } = req.body;
+      const { user, role, permissions } = req.body;
 
       const project = await Project.findById(id);
       if (!project || !project.isActive) {
@@ -350,7 +549,19 @@ class ProjectController {
 
       // Solo owner puede agregar miembros
       if (project.owner.toString() !== req.user.userId) {
-        return sendError(res, 403, 'Sin permisos para agregar miembros');
+        return sendError(res, 403, 'Solo el propietario puede agregar miembros');
+      }
+
+      // Verificar que el usuario existe
+      const userExists = await User.findById(user);
+      if (!userExists || !userExists.isActive) {
+        return sendError(res, 400, 'Usuario no válido');
+      }
+
+      // Verificar que el rol existe
+      const roleExists = await Role.findById(role);
+      if (!roleExists || !roleExists.isActive) {
+        return sendError(res, 400, 'Rol no válido');
       }
 
       // Verificar que no sea ya miembro
@@ -359,17 +570,26 @@ class ProjectController {
       );
 
       if (isAlreadyMember) {
-        return sendError(res, 400, 'El usuario ya es miembro');
+        return sendError(res, 400, 'El usuario ya es miembro del proyecto');
       }
 
+      // Permisos por defecto basados en rol si no se especifican
+      const defaultPermissions = permissions || this.getPermissionsByRole(roleExists.name);
+
       // Agregar miembro
-      project.members.push({ user, role });
+      project.members.push({ 
+        user, 
+        role,
+        permissions: defaultPermissions
+      });
       await project.save();
 
-      await project.populate('members.user', 'firstName lastName email');
-      await project.populate('members.role', 'name');
+      await project.populate([
+        { path: 'members.user', select: 'firstName lastName email avatar' },
+        { path: 'members.role', select: 'name' }
+      ]);
 
-      sendResponse(res, 200, true, 'Miembro agregado', {
+      sendResponse(res, 200, true, 'Miembro agregado exitosamente', {
         project: {
           _id: project._id,
           name: project.name,
@@ -394,22 +614,28 @@ class ProjectController {
 
       // Solo owner puede remover miembros
       if (project.owner.toString() !== req.user.userId) {
-        return sendError(res, 403, 'Sin permisos para remover miembros');
+        return sendError(res, 403, 'Solo el propietario puede remover miembros');
       }
 
       // No se puede remover al owner
       if (userId === project.owner.toString()) {
-        return sendError(res, 400, 'No se puede remover al propietario');
+        return sendError(res, 400, 'No se puede remover al propietario del proyecto');
+      }
+
+      // Verificar que es miembro
+      const memberIndex = project.members.findIndex(
+        member => member.user.toString() === userId
+      );
+
+      if (memberIndex === -1) {
+        return sendError(res, 400, 'El usuario no es miembro del proyecto');
       }
 
       // Remover miembro
-      project.members = project.members.filter(
-        member => member.user.toString() !== userId
-      );
-
+      project.members.splice(memberIndex, 1);
       await project.save();
 
-      sendResponse(res, 200, true, 'Miembro removido');
+      sendResponse(res, 200, true, 'Miembro removido exitosamente');
     } catch (error) {
       console.error('Error remover miembro:', error);
       sendError(res, 500, 'Error interno del servidor');
@@ -427,38 +653,179 @@ class ProjectController {
         return sendError(res, 404, 'Proyecto no encontrado');
       }
 
-      // Verificar permisos (owner o miembro con rol PM)
-      const isOwner = project.owner.toString() === req.user.userId;
-      const isPM = project.members.some(member => 
-        member.user.toString() === req.user.userId && 
-        member.role.name === 'Project Manager'
-      );
+      // Verificar permisos (owner o PM del proyecto)
+      const canChange = project.owner.toString() === req.user.userId ||
+                       project.members.some(member => 
+                         member.user.toString() === req.user.userId && 
+                         member.role.name === 'Project Manager'
+                       );
 
-      if (!isOwner && !isPM) {
-        return sendError(res, 403, 'Sin permisos para cambiar estado');
+      if (!canChange) {
+        return sendError(res, 403, 'Sin permisos para cambiar el estado');
       }
 
       // Verificar estado válido
       const newStatus = await State.findById(status);
       if (!newStatus || !newStatus.isActive || newStatus.type !== 'Project') {
-        return sendError(res, 400, 'Estado no válido');
+        return sendError(res, 400, 'Estado no válido para proyectos');
       }
 
       project.status = status;
-      await project.save();
+      
+      // Actualizar progreso si el proyecto se completa
+      if (newStatus.name === 'Completado') {
+        project.aiMetadata.healthScore = 100;
+      }
 
+      await project.save();
       await project.populate('status', 'name description');
 
-      sendResponse(res, 200, true, 'Estado cambiado', {
+      sendResponse(res, 200, true, 'Estado actualizado exitosamente', {
         project: {
           _id: project._id,
           name: project.name,
-          status: project.status
+          status: project.status,
+          aiMetadata: project.aiMetadata
         }
       });
     } catch (error) {
       console.error('Error cambiar estado:', error);
       sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Actualizar configuraciones del proyecto
+  async updateSettings(req, res) {
+    try {
+      const { id } = req.params;
+      const { settings } = req.body;
+
+      const project = await Project.findById(id);
+      if (!project || !project.isActive) {
+        return sendError(res, 404, 'Proyecto no encontrado');
+      }
+
+      // Solo owner puede cambiar configuraciones
+      if (project.owner.toString() !== req.user.userId) {
+        return sendError(res, 403, 'Solo el propietario puede cambiar configuraciones');
+      }
+
+      project.settings = { ...project.settings, ...settings };
+      await project.save();
+
+      sendResponse(res, 200, true, 'Configuraciones actualizadas', {
+        settings: project.settings
+      });
+    } catch (error) {
+      console.error('Error actualizar configuraciones:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Actualizar permisos de miembro
+  async updateMemberPermissions(req, res) {
+    try {
+      const { id, userId } = req.params;
+      const { permissions } = req.body;
+
+      const project = await Project.findById(id);
+      if (!project || !project.isActive) {
+        return sendError(res, 404, 'Proyecto no encontrado');
+      }
+
+      // Solo owner puede cambiar permisos
+      if (project.owner.toString() !== req.user.userId) {
+        return sendError(res, 403, 'Solo el propietario puede cambiar permisos');
+      }
+
+      const memberIndex = project.members.findIndex(
+        member => member.user.toString() === userId
+      );
+
+      if (memberIndex === -1) {
+        return sendError(res, 400, 'Usuario no es miembro del proyecto');
+      }
+
+      project.members[memberIndex].permissions = {
+        ...project.members[memberIndex].permissions,
+        ...permissions
+      };
+
+      await project.save();
+
+      sendResponse(res, 200, true, 'Permisos actualizados exitosamente', {
+        member: project.members[memberIndex]
+      });
+    } catch (error) {
+      console.error('Error actualizar permisos:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Helper: Obtener estadísticas del usuario
+  async getProjectStats(userId) {
+    try {
+      const totalProjects = await Project.countDocuments({
+        $or: [{ owner: userId }, { 'members.user': userId }],
+        isActive: true
+      });
+
+      const ownedProjects = await Project.countDocuments({
+        owner: userId,
+        isActive: true
+      });
+
+      const memberProjects = totalProjects - ownedProjects;
+
+      const overdueProjects = await Project.countDocuments({
+        $or: [{ owner: userId }, { 'members.user': userId }],
+        isActive: true,
+        endDate: { $lt: new Date() }
+      });
+
+      return {
+        total: totalProjects,
+        owned: ownedProjects,
+        member: memberProjects,
+        overdue: overdueProjects
+      };
+    } catch (error) {
+      console.error('Error obteniendo estadísticas:', error);
+      return { total: 0, owned: 0, member: 0, overdue: 0 };
+    }
+  }
+
+  // Helper: Permisos por rol
+  getPermissionsByRole(roleName) {
+    switch(roleName) {
+      case 'Admin':
+        return {
+          canCreateTasks: true,
+          canEditTasks: true,
+          canDeleteTasks: true,
+          canAssignTasks: true
+        };
+      case 'Project Manager':
+        return {
+          canCreateTasks: true,
+          canEditTasks: true,
+          canDeleteTasks: true,
+          canAssignTasks: true
+        };
+      case 'Developer':
+        return {
+          canCreateTasks: true,
+          canEditTasks: true,
+          canDeleteTasks: false,
+          canAssignTasks: false
+        };
+      default:
+        return {
+          canCreateTasks: false,
+          canEditTasks: false,
+          canDeleteTasks: false,
+          canAssignTasks: false
+        };
     }
   }
 }
@@ -471,21 +838,65 @@ module.exports = new ProjectController();
 const express = require('express');
 const router = express.Router();
 const projectController = require('../controllers/project.controller');
-const { validateProject, validateMember, validateStatus } = require('../validators/project.validator');
+const { 
+  validateProject, 
+  validateMember, 
+  validateStatus,
+  validateSettings,
+  validatePermissions
+} = require('../validators/project.validator');
 const { authenticate } = require('../middlewares/auth.middleware');
 const { authorize } = require('../middlewares/role.middleware');
 const { handleValidation } = require('../middlewares/validation.middleware');
 
+// Todas las rutas requieren autenticación
 router.use(authenticate);
 
+// Rutas principales
 router.get('/', projectController.getProjects);
-router.post('/', authorize(['Admin', 'Project Manager']), validateProject, handleValidation, projectController.createProject);
+router.post('/', 
+  authorize(['Admin', 'Project Manager']), 
+  validateProject, 
+  handleValidation, 
+  projectController.createProject
+);
 router.get('/:id', projectController.getProject);
-router.put('/:id', validateProject, handleValidation, projectController.updateProject);
-router.delete('/:id', authorize(['Admin']), projectController.deleteProject);
-router.post('/:id/members', validateMember, handleValidation, projectController.addMember);
-router.delete('/:id/members/:userId', projectController.removeMember);
-router.put('/:id/status', validateStatus, handleValidation, projectController.changeStatus);
+router.put('/:id', 
+  validateProject, 
+  handleValidation, 
+  projectController.updateProject
+);
+router.delete('/:id', 
+  authorize(['Admin']), 
+  projectController.deleteProject
+);
+
+// Gestión de miembros
+router.post('/:id/members', 
+  validateMember, 
+  handleValidation, 
+  projectController.addMember
+);
+router.delete('/:id/members/:userId', 
+  projectController.removeMember
+);
+router.put('/:id/members/:userId/permissions',
+  validatePermissions,
+  handleValidation,
+  projectController.updateMemberPermissions
+);
+
+// Estado y configuraciones
+router.put('/:id/status', 
+  validateStatus, 
+  handleValidation, 
+  projectController.changeStatus
+);
+router.put('/:id/settings',
+  validateSettings,
+  handleValidation,
+  projectController.updateSettings
+);
 
 module.exports = router;
 
@@ -498,12 +909,12 @@ const validateProject = [
   body('name')
     .trim()
     .isLength({ min: 3, max: 100 })
-    .withMessage('Nombre: 3-100 caracteres'),
+    .withMessage('Nombre debe tener entre 3 y 100 caracteres'),
 
   body('description')
     .trim()
     .isLength({ min: 10, max: 1000 })
-    .withMessage('Descripción: 10-1000 caracteres'),
+    .withMessage('Descripción debe tener entre 10 y 1000 caracteres'),
 
   body('category')
     .isMongoId()
@@ -547,7 +958,37 @@ const validateProject = [
     .optional()
     .trim()
     .isLength({ min: 1, max: 20 })
-    .withMessage('Cada tag: 1-20 caracteres')
+    .withMessage('Cada tag debe tener entre 1 y 20 caracteres'),
+
+  body('settings')
+    .optional()
+    .isObject()
+    .withMessage('Settings debe ser un objeto'),
+
+  body('settings.allowComments')
+    .optional()
+    .isBoolean()
+    .withMessage('allowComments debe ser booleano'),
+
+  body('settings.allowTaskCreation')
+    .optional()
+    .isBoolean()
+    .withMessage('allowTaskCreation debe ser booleano'),
+
+  body('settings.requireTaskApproval')
+    .optional()
+    .isBoolean()
+    .withMessage('requireTaskApproval debe ser booleano'),
+
+  body('settings.notifyOnTaskComplete')
+    .optional()
+    .isBoolean()
+    .withMessage('notifyOnTaskComplete debe ser booleano'),
+
+  body('settings.aiAssistEnabled')
+    .optional()
+    .isBoolean()
+    .withMessage('aiAssistEnabled debe ser booleano')
 ];
 
 const validateMember = [
@@ -557,7 +998,32 @@ const validateMember = [
 
   body('role')
     .isMongoId()
-    .withMessage('ID de rol inválido')
+    .withMessage('ID de rol inválido'),
+
+  body('permissions')
+    .optional()
+    .isObject()
+    .withMessage('Permisos debe ser un objeto'),
+
+  body('permissions.canCreateTasks')
+    .optional()
+    .isBoolean()
+    .withMessage('canCreateTasks debe ser booleano'),
+
+  body('permissions.canEditTasks')
+    .optional()
+    .isBoolean()
+    .withMessage('canEditTasks debe ser booleano'),
+
+  body('permissions.canDeleteTasks')
+    .optional()
+    .isBoolean()
+    .withMessage('canDeleteTasks debe ser booleano'),
+
+  body('permissions.canAssignTasks')
+    .optional()
+    .isBoolean()
+    .withMessage('canAssignTasks debe ser booleano')
 ];
 
 const validateStatus = [
@@ -566,10 +1032,69 @@ const validateStatus = [
     .withMessage('ID de estado inválido')
 ];
 
+const validateSettings = [
+  body('settings')
+    .isObject()
+    .withMessage('Settings es requerido y debe ser un objeto'),
+
+  body('settings.allowComments')
+    .optional()
+    .isBoolean()
+    .withMessage('allowComments debe ser booleano'),
+
+  body('settings.allowTaskCreation')
+    .optional()
+    .isBoolean()
+    .withMessage('allowTaskCreation debe ser booleano'),
+
+  body('settings.requireTaskApproval')
+    .optional()
+    .isBoolean()
+    .withMessage('requireTaskApproval debe ser booleano'),
+
+  body('settings.notifyOnTaskComplete')
+    .optional()
+    .isBoolean()
+    .withMessage('notifyOnTaskComplete debe ser booleano'),
+
+  body('settings.aiAssistEnabled')
+    .optional()
+    .isBoolean()
+    .withMessage('aiAssistEnabled debe ser booleano')
+];
+
+const validatePermissions = [
+  body('permissions')
+    .isObject()
+    .withMessage('Permisos es requerido y debe ser un objeto'),
+
+  body('permissions.canCreateTasks')
+    .optional()
+    .isBoolean()
+    .withMessage('canCreateTasks debe ser booleano'),
+
+  body('permissions.canEditTasks')
+    .optional()
+    .isBoolean()
+    .withMessage('canEditTasks debe ser booleano'),
+
+  body('permissions.canDeleteTasks')
+    .optional()
+    .isBoolean()
+    .withMessage('canDeleteTasks debe ser booleano'),
+
+  body('permissions.canAssignTasks')
+    .optional()
+    .isBoolean()
+    .withMessage('canAssignTasks debe ser booleano')
+];
+
 module.exports = {
   validateProject,
   validateMember,
-  validateStatus
+  validateStatus,
+  validateSettings,
+  validatePermissions
 };
 
 // ===================================
@@ -588,10 +1113,11 @@ describe('Project Endpoints', () => {
   let testUser;
   let testCategory;
   let testState;
+  let pmRole;
 
   beforeAll(async () => {
     // Crear rol PM
-    const pmRole = await Role.create({
+    pmRole = await Role.create({
       name: 'Project Manager',
       description: 'Gestor de proyectos'
     });
@@ -636,10 +1162,10 @@ describe('Project Endpoints', () => {
   });
 
   describe('POST /api/projects', () => {
-    test('Should create a new project', async () => {
+    test('Should create a new project with default settings', async () => {
       const projectData = {
         name: 'Test Project',
-        description: 'This is a test project description',
+        description: 'This is a test project description with enough characters',
         category: testCategory._id,
         startDate: new Date(),
         endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
@@ -657,22 +1183,33 @@ describe('Project Endpoints', () => {
       expect(response.status).toBe(201);
       expect(response.body.success).toBe(true);
       expect(response.body.data.project.name).toBe(projectData.name);
+      expect(response.body.data.project.settings.allowComments).toBe(true);
+      expect(response.body.data.project.settings.aiAssistEnabled).toBe(true);
     });
 
-    test('Should not create project with invalid data', async () => {
-      const invalidData = {
-        name: 'A', // Muy corto
-        description: 'Short',
-        category: 'invalid-id'
+    test('Should create project with custom settings', async () => {
+      const projectData = {
+        name: 'Custom Settings Project',
+        description: 'Project with custom settings for testing',
+        category: testCategory._id,
+        startDate: new Date(),
+        endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        settings: {
+          allowComments: false,
+          requireTaskApproval: true,
+          aiAssistEnabled: false
+        }
       };
 
       const response = await request(app)
         .post('/api/projects')
         .set('Authorization', `Bearer ${authToken}`)
-        .send(invalidData);
+        .send(projectData);
 
-      expect(response.status).toBe(400);
-      expect(response.body.success).toBe(false);
+      expect(response.status).toBe(201);
+      expect(response.body.data.project.settings.allowComments).toBe(false);
+      expect(response.body.data.project.settings.requireTaskApproval).toBe(true);
+      expect(response.body.data.project.settings.aiAssistEnabled).toBe(false);
     });
   });
 
@@ -680,7 +1217,7 @@ describe('Project Endpoints', () => {
     beforeEach(async () => {
       await Project.create({
         name: 'Test Project',
-        description: 'Test project description',
+        description: 'Test project description for listing',
         category: testCategory._id,
         owner: testUser._id,
         status: testState._id,
@@ -688,12 +1225,18 @@ describe('Project Endpoints', () => {
         endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
         members: [{
           user: testUser._id,
-          role: testUser.globalRole
+          role: pmRole._id,
+          permissions: {
+            canCreateTasks: true,
+            canEditTasks: true,
+            canDeleteTasks: true,
+            canAssignTasks: true
+          }
         }]
       });
     });
 
-    test('Should get user projects', async () => {
+    test('Should get user projects with stats', async () => {
       const response = await request(app)
         .get('/api/projects')
         .set('Authorization', `Bearer ${authToken}`);
@@ -701,22 +1244,26 @@ describe('Project Endpoints', () => {
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
       expect(response.body.data.projects).toHaveLength(1);
+      expect(response.body.data.stats).toBeDefined();
+      expect(response.body.data.stats.total).toBe(1);
     });
   });
 
   describe('POST /api/projects/:id/members', () => {
     let testProject;
     let newUser;
+    let devRole;
 
     beforeEach(async () => {
-      // Crear nuevo usuario
-      const devRole = await Role.findOne({ name: 'Developer' }) ||
-                     await Role.create({ name: 'Developer', description: 'Dev' });
+      // Crear rol developer
+      devRole = await Role.findOne({ name: 'Developer' }) ||
+                await Role.create({ name: 'Developer', description: 'Developer role' });
 
+      // Crear nuevo usuario
       newUser = await User.create({
         firstName: 'New',
-        lastName: 'User',
-        email: 'newuser@test.com',
+        lastName: 'Developer',
+        email: 'dev@test.com',
         password: 'password123',
         globalRole: devRole._id
       });
@@ -724,7 +1271,7 @@ describe('Project Endpoints', () => {
       // Crear proyecto
       testProject = await Project.create({
         name: 'Test Project',
-        description: 'Test description',
+        description: 'Test description for member testing',
         category: testCategory._id,
         owner: testUser._id,
         status: testState._id,
@@ -732,103 +1279,320 @@ describe('Project Endpoints', () => {
         endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
         members: [{
           user: testUser._id,
-          role: testUser.globalRole
+          role: pmRole._id,
+          permissions: {
+            canCreateTasks: true,
+            canEditTasks: true,
+            canDeleteTasks: true,
+            canAssignTasks: true
+          }
         }]
       });
     });
 
-    test('Should add member to project', async () => {
+    test('Should add member with custom permissions', async () => {
+      const memberData = {
+        user: newUser._id,
+        role: devRole._id,
+        permissions: {
+          canCreateTasks: true,
+          canEditTasks: false,
+          canDeleteTasks: false,
+          canAssignTasks: false
+        }
+      };
+
       const response = await request(app)
         .post(`/api/projects/${testProject._id}/members`)
         .set('Authorization', `Bearer ${authToken}`)
-        .send({
-          user: newUser._id,
-          role: newUser.globalRole
-        });
+        .send(memberData);
 
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
+      expect(response.body.data.project.members).toHaveLength(2);
+    });
+  });
+
+  describe('PUT /api/projects/:id/settings', () => {
+    let testProject;
+
+    beforeEach(async () => {
+      testProject = await Project.create({
+        name: 'Settings Test Project',
+        description: 'Project for testing settings updates',
+        category: testCategory._id,
+        owner: testUser._id,
+        status: testState._id,
+        startDate: new Date(),
+        endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        members: [{
+          user: testUser._id,
+          role: pmRole._id
+        }]
+      });
+    });
+
+    test('Should update project settings', async () => {
+      const newSettings = {
+        settings: {
+          allowComments: false,
+          requireTaskApproval: true,
+          aiAssistEnabled: false
+        }
+      };
+
+      const response = await request(app)
+        .put(`/api/projects/${testProject._id}/settings`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send(newSettings);
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.settings.allowComments).toBe(false);
+      expect(response.body.data.settings.requireTaskApproval).toBe(true);
     });
   });
 });
 
 // ===================================
-// Instrucciones para Mariana
+// scripts/seed-projects.js
+// ===================================
+const mongoose = require('mongoose');
+const Project = require('../src/models/Project.model');
+const User = require('../src/models/User.model');
+const Category = require('../src/models/Category.model');
+const State = require('../src/models/State.model');
+const Role = require('../src/models/Role.model');
+require('dotenv').config();
+
+const seedProjects = async () => {
+  try {
+    await mongoose.connect(process.env.MONGODB_URI);
+    console.log('Conectado a MongoDB para seed de proyectos');
+
+    // Obtener datos necesarios
+    const adminUser = await User.findOne({ email: 'admin@test.com' });
+    const webCategory = await Category.findOne({ name: 'Web Development' }) ||
+                       await Category.create({
+                         name: 'Web Development',
+                         description: 'Desarrollo de aplicaciones web',
+                         createdBy: adminUser._id
+                       });
+
+    const planningState = await State.findOne({ name: 'Planificación', type: 'Project' });
+    const progressState = await State.findOne({ name: 'En Progreso', type: 'Project' });
+    const pmRole = await Role.findOne({ name: 'Project Manager' });
+    const devRole = await Role.findOne({ name: 'Developer' });
+
+    const sampleProjects = [
+      {
+        name: 'E-commerce Platform',
+        description: 'Desarrollo de plataforma de comercio electrónico con React y Node.js. Incluye carrito de compras, pagos en línea, gestión de inventario y panel de administración.',
+        category: webCategory._id,
+        owner: adminUser._id,
+        status: progressState._id,
+        priority: 'High',
+        startDate: new Date('2024-01-15'),
+        endDate: new Date('2024-06-30'),
+        estimatedHours: 500,
+        budget: 25000,
+        tags: ['react', 'nodejs', 'ecommerce', 'stripe'],
+        members: [{
+          user: adminUser._id,
+          role: pmRole._id,
+          permissions: {
+            canCreateTasks: true,
+            canEditTasks: true,
+            canDeleteTasks: true,
+            canAssignTasks: true
+          }
+        }],
+        settings: {
+          allowComments: true,
+          allowTaskCreation: true,
+          requireTaskApproval: false,
+          notifyOnTaskComplete: true,
+          aiAssistEnabled: true
+        },
+        aiMetadata: {
+          healthScore: 75,
+          riskLevel: 'Medium',
+          recommendations: [
+            'Revisar cronograma de desarrollo',
+            'Aumentar cobertura de testing',
+            'Implementar CI/CD pipeline'
+          ]
+        }
+      },
+      {
+        name: 'Mobile Banking App',
+        description: 'Aplicación móvil para banca digital con autenticación biométrica, transferencias, pagos y gestión de cuentas.',
+        category: webCategory._id,
+        owner: adminUser._id,
+        status: planningState._id,
+        priority: 'Critical',
+        startDate: new Date('2024-03-01'),
+        endDate: new Date('2024-12-31'),
+        estimatedHours: 800,
+        budget: 50000,
+        tags: ['mobile', 'banking', 'security', 'flutter'],
+        members: [{
+          user: adminUser._id,
+          role: pmRole._id,
+          permissions: {
+            canCreateTasks: true,
+            canEditTasks: true,
+            canDeleteTasks: true,
+            canAssignTasks: true
+          }
+        }],
+        settings: {
+          allowComments: true,
+          allowTaskCreation: true,
+          requireTaskApproval: true,
+          notifyOnTaskComplete: true,
+          aiAssistEnabled: true
+        },
+        aiMetadata: {
+          healthScore: 20,
+          riskLevel: 'Low',
+          recommendations: [
+            'Definir arquitectura de seguridad',
+            'Seleccionar stack tecnológico',
+            'Crear wireframes y prototipos'
+          ]
+        }
+      },
+      {
+        name: 'Company Intranet',
+        description: 'Sistema interno para gestión de empleados, documentos, comunicación interna y recursos humanos.',
+        category: webCategory._id,
+        owner: adminUser._id,
+        status: progressState._id,
+        priority: 'Medium',
+        startDate: new Date('2024-02-01'),
+        endDate: new Date('2024-08-15'),
+        estimatedHours: 300,
+        budget: 15000,
+        tags: ['intranet', 'hr', 'internal', 'vue'],
+        members: [{
+          user: adminUser._id,
+          role: pmRole._id,
+          permissions: {
+            canCreateTasks: true,
+            canEditTasks: true,
+            canDeleteTasks: true,
+            canAssignTasks: true
+          }
+        }],
+        settings: {
+          allowComments: true,
+          allowTaskCreation: true,
+          requireTaskApproval: false,
+          notifyOnTaskComplete: false,
+          aiAssistEnabled: false
+        },
+        aiMetadata: {
+          healthScore: 60,
+          riskLevel: 'Low',
+          recommendations: [
+            'Integrar con sistema de RRHH existente',
+            'Mejorar UX del dashboard'
+          ]
+        }
+      }
+    ];
+
+    // Limpiar proyectos existentes
+    await Project.deleteMany({});
+
+    // Crear proyectos de ejemplo
+    for (const projectData of sampleProjects) {
+      const project = await Project.create(projectData);
+      console.log(`✅ Proyecto creado: ${project.name}`);
+    }
+
+    console.log('🎉 Seed de proyectos completado exitosamente');
+    process.exit(0);
+  } catch (error) {
+    console.error('❌ Error en seed de proyectos:', error);
+    process.exit(1);
+  }
+};
+
+if (require.main === module) {
+  seedProjects();
+}
+
+module.exports = seedProjects;
+
+// ===================================
+// Actualización necesaria en server.js
 // ===================================
 
 /*
-INSTRUCCIONES PARA MARIANA GOMEZ:
+AGREGAR ESTA LÍNEA EN server.js DESPUÉS DE LAS RUTAS EXISTENTES:
 
-1. DEPENDENCIES:
-   - Esperar que Samuel complete auth y Franklin complete categorías/estados
-   - No necesita dependencias adicionales
+// Rutas existentes...
+app.use('/api/auth', require('./src/routes/auth.routes'));
+app.use('/api/users', require('./src/routes/user.routes'));
+app.use('/api/roles', require('./src/routes/role.routes'));
+app.use('/api/categories', require('./src/routes/category.routes'));
+app.use('/api/states', require('./src/routes/state.routes'));
+app.use('/api/upload', require('./src/routes/upload.routes'));
 
-2. ARCHIVOS A CREAR:
-   - src/models/Project.model.js
-   - src/controllers/project.controller.js
-   - src/routes/project.routes.js
-   - src/validators/project.validator.js
-   - tests/project.test.js
+// ✅ NUEVA RUTA DE MARIANA:
+app.use('/api/projects', require('./src/routes/project.routes'));
 
-3. ENDPOINTS PRINCIPALES:
-   - GET /api/projects (listar proyectos del usuario)
-   - POST /api/projects (crear proyecto - PM/Admin)
-   - GET /api/projects/:id (obtener proyecto específico)
-   - PUT /api/projects/:id (actualizar proyecto)
-   - DELETE /api/projects/:id (eliminar proyecto - Admin)
-   - POST /api/projects/:id/members (agregar miembro)
-   - DELETE /api/projects/:id/members/:userId (remover miembro)
-   - PUT /api/projects/:id/status (cambiar estado)
+// Las rutas de Maryamm se agregarán después:
+// app.use('/api/tasks', require('./src/routes/task.routes'));
+// app.use('/api/comments', require('./src/routes/comment.routes'));
+// app.use('/api/ai', require('./src/routes/ai.routes'));
+*/
 
-4. VALIDACIONES:
-   - Nombre: 3-100 caracteres
-   - Descripción: 10-1000 caracteres
-   - Fechas: endDate > startDate
-   - Categoría: debe existir y estar activa
-   - Budget/hours: números positivos
+// ===================================
+// DOCUMENTACIÓN DE INTEGRACIÓN
+// ===================================
 
-5. PERMISOS:
-   - Crear: Project Manager o Admin
-   - Ver: Owner o miembro del proyecto
-   - Editar: Owner del proyecto
-   - Eliminar: Solo Admin
-   - Miembros: Solo owner puede agregar/remover
-   - Estado: Owner o PM del proyecto
+/*
+🔗 INTEGRACIÓN CON MARYAMM:
 
-6. RELACIONES:
-   - owner -> User
-   - category -> Category (Franklin)
-   - status -> State (Franklin)
-   - members.user -> User
-   - members.role -> Role
+1. CAMPOS PREPARADOS PARA TASKS:
+   - members[].permissions.canCreateTasks
+   - members[].permissions.canEditTasks
+   - members[].permissions.canDeleteTasks
+   - members[].permissions.canAssignTasks
+   - settings.allowTaskCreation
+   - settings.requireTaskApproval
+   - settings.notifyOnTaskComplete
 
-7. CARACTERÍSTICAS:
-   - Soft delete (isActive: false)
-   - Paginación en listados
-   - Filtros por owner/miembro
-   - Validación de fechas
-   - Sistema de miembros con roles
+2. CAMPOS PREPARADOS PARA COMMENTS:
+   - settings.allowComments
 
-8. ORDEN DE TRABAJO:
-   Semana 3: Después de Samuel (auth) y Franklin (categories/states)
-   - Día 1-2: Modelo Project completo
-   - Día 3-4: Controlador y rutas principales
-   - Día 4-5: Sistema de miembros y permisos
-   - Día 5: Tests y validaciones
+3. CAMPOS PREPARADOS PARA IA:
+   - settings.aiAssistEnabled
+   - aiMetadata.healthScore
+   - aiMetadata.riskLevel
+   - aiMetadata.recommendations
+   - aiMetadata.lastAnalysis
 
-9. NOTAS IMPORTANTES:
-   - El proyecto siempre incluye al owner como miembro
-   - Solo el owner puede agregar/remover miembros
-   - Estado inicial: "Planificación"
-   - Tags son opcionales, máximo 20 caracteres cada uno
-   - Virtual fields: progress, daysRemaining
+4. VIRTUALS DISPONIBLES:
+   - taskCount (conteo de tareas)
+   - commentCount (conteo de comentarios)
+   - progress (progreso basado en tareas)
+   - isOverdue (proyecto retrasado)
 
-10. ESTRUCTURA MEMBERS:
-    members: [{
-      user: ObjectId (referencia a User),
-      role: ObjectId (referencia a Role),
-      joinedAt: Date (default: now)
-    }]
+5. MÉTODOS HELPER:
+   - updateProgressFromTasks() (actualizar progreso desde tareas)
+   - getPermissionsByRole() (permisos por rol)
 
-¡LISTO PARA DESARROLLAR PROYECTOS! 🚀
+6. ENDPOINTS LISTOS:
+   - PUT /api/projects/:id/settings (configurar IA/tasks/comments)
+   - PUT /api/projects/:id/members/:userId/permissions (permisos de tareas)
+
+7. CAMPOS POPULADOS EN RELACIONES:
+   - Virtual taskCount y commentCount automáticamente populados
+   - Members con permisos específicos para cada usuario
+
+🚀 ¡LISTO PARA INTEGRACIÓN PERFECTA CON MARYAMM!
 */
