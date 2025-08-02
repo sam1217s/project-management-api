@@ -1,150 +1,168 @@
-﻿// Línea 1
-// Línea 2
-// Línea 3
-// Línea 4
-// Línea 5
-// Línea 6
-// Línea 7
-// Línea 8
-// Línea 9
-// Línea 10
-// Línea 11
-// Línea 12
-// Línea 13
-// Línea 14
-// Línea 15
-// Línea 16
-// Línea 17
-// Línea 18
-// Línea 19
-// Línea 20
-// Línea 21
-// Línea 22
-// Línea 23
-// Línea 24
-// Línea 25
-// Línea 26
-// Línea 27
-// Línea 28
-// Línea 29
-// Línea 30
-// Línea 31
-// Línea 32
-// Línea 33
-// Línea 34
-// Línea 35
-// Línea 36
-// Línea 37
-// Línea 38
-// Línea 39
-// Línea 40
-// Línea 41
-// Línea 42
-// Línea 43
-// Línea 44
-// Línea 45
-// Línea 46
-// Línea 47
-// Línea 48
-// Línea 49
-// Línea 50
-// Línea 51
-// Línea 52
-// Línea 53
-// Línea 54
-// Línea 55
-// Línea 56
-// Línea 57
-// Línea 58
-// Línea 59
-// Línea 60
-// Línea 61
-// Línea 62
-// Línea 63
-// Línea 64
-// Línea 65
-// Línea 66
-// Línea 67
-// Línea 68
-// Línea 69
-// Línea 70
-// Línea 71
-// Línea 72
-// Línea 73
-// Línea 74
-// Línea 75
-// Línea 76
-// Línea 77
-// Línea 78
-// Línea 79
-// Línea 80
-// Línea 81
-// Línea 82
-// Línea 83
-// Línea 84
-// Línea 85
-// Línea 86
-// Línea 87
-// Línea 88
-// Línea 89
-// Línea 90
-// Línea 91
-// Línea 92
-// Línea 93
-// Línea 94
-// Línea 95
-// Línea 96
-// Línea 97
-// Línea 98
-// Línea 99
-// Línea 100
-// Línea 101
-// Línea 102
-// Línea 103
-// Línea 104
-// Línea 105
-// Línea 106
-// Línea 107
-// Línea 108
-// Línea 109
-// Línea 110
-// Línea 111
-// Línea 112
-// Línea 113
-// Línea 114
-// Línea 115
-// Línea 116
-// Línea 117
-// Línea 118
-// Línea 119
-// Línea 120
-// Línea 121
-// Línea 122
-// Línea 123
-// Línea 124
-// Línea 125
-// Línea 126
-// Línea 127
-// Línea 128
-// Línea 129
-// Línea 130
-// Línea 131
-// Línea 132
-// Línea 133
-// Línea 134
-// Línea 135
-// Línea 136
-// Línea 137
-// Línea 138
-// Línea 139
-// Línea 140
-// Línea 141
-// Línea 142
-// Línea 143
-// Línea 144
-// Línea 145
-// Línea 146
-// Línea 147
-// Línea 148
-// Línea 149
-// Línea 150
+﻿const mongoose = require('mongoose');
+const Project = require('../src/models/Project.model');
+const User = require('../src/models/User.model');
+const Category = require('../src/models/Category.model');
+const State = require('../src/models/State.model');
+const Role = require('../src/models/Role.model');
+require('dotenv').config();
+
+const seedProjects = async () => {
+  try {
+    await mongoose.connect(process.env.MONGODB_URI);
+    console.log('Conectado a MongoDB para seed de proyectos');
+
+    // Obtener datos necesarios
+    const adminUser = await User.findOne({ email: 'admin@test.com' });
+    const webCategory = await Category.findOne({ name: 'Web Development' }) ||
+                       await Category.create({
+                         name: 'Web Development',
+                         description: 'Desarrollo de aplicaciones web',
+                         createdBy: adminUser._id
+                       });
+
+    const planningState = await State.findOne({ name: 'Planificación', type: 'Project' });
+    const progressState = await State.findOne({ name: 'En Progreso', type: 'Project' });
+    const pmRole = await Role.findOne({ name: 'Project Manager' });
+    const devRole = await Role.findOne({ name: 'Developer' });
+
+    const sampleProjects = [
+      {
+        name: 'E-commerce Platform',
+        description: 'Desarrollo de plataforma de comercio electrónico con React y Node.js. Incluye carrito de compras, pagos en línea, gestión de inventario y panel de administración.',
+        category: webCategory._id,
+        owner: adminUser._id,
+        status: progressState._id,
+        priority: 'High',
+        startDate: new Date('2024-01-15'),
+        endDate: new Date('2024-06-30'),
+        estimatedHours: 500,
+        budget: 25000,
+        tags: ['react', 'nodejs', 'ecommerce', 'stripe'],
+        members: [{
+          user: adminUser._id,
+          role: pmRole._id,
+          permissions: {
+            canCreateTasks: true,
+            canEditTasks: true,
+            canDeleteTasks: true,
+            canAssignTasks: true
+          }
+        }],
+        settings: {
+          allowComments: true,
+          allowTaskCreation: true,
+          requireTaskApproval: false,
+          notifyOnTaskComplete: true,
+          aiAssistEnabled: true
+        },
+        aiMetadata: {
+          healthScore: 75,
+          riskLevel: 'Medium',
+          recommendations: [
+            'Revisar cronograma de desarrollo',
+            'Aumentar cobertura de testing',
+            'Implementar CI/CD pipeline'
+          ]
+        }
+      },
+      {
+        name: 'Mobile Banking App',
+        description: 'Aplicación móvil para banca digital con autenticación biométrica, transferencias, pagos y gestión de cuentas.',
+        category: webCategory._id,
+        owner: adminUser._id,
+        status: planningState._id,
+        priority: 'Critical',
+        startDate: new Date('2024-03-01'),
+        endDate: new Date('2024-12-31'),
+        estimatedHours: 800,
+        budget: 50000,
+        tags: ['mobile', 'banking', 'security', 'flutter'],
+        members: [{
+          user: adminUser._id,
+          role: pmRole._id,
+          permissions: {
+            canCreateTasks: true,
+            canEditTasks: true,
+            canDeleteTasks: true,
+            canAssignTasks: true
+          }
+        }],
+        settings: {
+          allowComments: true,
+          allowTaskCreation: true,
+          requireTaskApproval: true,
+          notifyOnTaskComplete: true,
+          aiAssistEnabled: true
+        },
+        aiMetadata: {
+          healthScore: 20,
+          riskLevel: 'Low',
+          recommendations: [
+            'Definir arquitectura de seguridad',
+            'Seleccionar stack tecnológico',
+            'Crear wireframes y prototipos'
+          ]
+        }
+      },
+      {
+        name: 'Company Intranet',
+        description: 'Sistema interno para gestión de empleados, documentos, comunicación interna y recursos humanos.',
+        category: webCategory._id,
+        owner: adminUser._id,
+        status: progressState._id,
+        priority: 'Medium',
+        startDate: new Date('2024-02-01'),
+        endDate: new Date('2024-08-15'),
+        estimatedHours: 300,
+        budget: 15000,
+        tags: ['intranet', 'hr', 'internal', 'vue'],
+        members: [{
+          user: adminUser._id,
+          role: pmRole._id,
+          permissions: {
+            canCreateTasks: true,
+            canEditTasks: true,
+            canDeleteTasks: true,
+            canAssignTasks: true
+          }
+        }],
+        settings: {
+          allowComments: true,
+          allowTaskCreation: true,
+          requireTaskApproval: false,
+          notifyOnTaskComplete: false,
+          aiAssistEnabled: false
+        },
+        aiMetadata: {
+          healthScore: 60,
+          riskLevel: 'Low',
+          recommendations: [
+            'Integrar con sistema de RRHH existente',
+            'Mejorar UX del dashboard'
+          ]
+        }
+      }
+    ];
+
+    // Limpiar proyectos existentes
+    await Project.deleteMany({});
+
+    // Crear proyectos de ejemplo
+    for (const projectData of sampleProjects) {
+      const project = await Project.create(projectData);
+      console.log(`✅ Proyecto creado: ${project.name}`);
+    }
+
+    console.log('🎉 Seed de proyectos completado exitosamente');
+    process.exit(0);
+  } catch (error) {
+    console.error('❌ Error en seed de proyectos:', error);
+    process.exit(1);
+  }
+};
+
+if (require.main === module) {
+  seedProjects();
+}
+
+module.exports = seedProjects;

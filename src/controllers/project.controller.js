@@ -1,800 +1,637 @@
-﻿// Línea 1
-// Línea 2
-// Línea 3
-// Línea 4
-// Línea 5
-// Línea 6
-// Línea 7
-// Línea 8
-// Línea 9
-// Línea 10
-// Línea 11
-// Línea 12
-// Línea 13
-// Línea 14
-// Línea 15
-// Línea 16
-// Línea 17
-// Línea 18
-// Línea 19
-// Línea 20
-// Línea 21
-// Línea 22
-// Línea 23
-// Línea 24
-// Línea 25
-// Línea 26
-// Línea 27
-// Línea 28
-// Línea 29
-// Línea 30
-// Línea 31
-// Línea 32
-// Línea 33
-// Línea 34
-// Línea 35
-// Línea 36
-// Línea 37
-// Línea 38
-// Línea 39
-// Línea 40
-// Línea 41
-// Línea 42
-// Línea 43
-// Línea 44
-// Línea 45
-// Línea 46
-// Línea 47
-// Línea 48
-// Línea 49
-// Línea 50
-// Línea 51
-// Línea 52
-// Línea 53
-// Línea 54
-// Línea 55
-// Línea 56
-// Línea 57
-// Línea 58
-// Línea 59
-// Línea 60
-// Línea 61
-// Línea 62
-// Línea 63
-// Línea 64
-// Línea 65
-// Línea 66
-// Línea 67
-// Línea 68
-// Línea 69
-// Línea 70
-// Línea 71
-// Línea 72
-// Línea 73
-// Línea 74
-// Línea 75
-// Línea 76
-// Línea 77
-// Línea 78
-// Línea 79
-// Línea 80
-// Línea 81
-// Línea 82
-// Línea 83
-// Línea 84
-// Línea 85
-// Línea 86
-// Línea 87
-// Línea 88
-// Línea 89
-// Línea 90
-// Línea 91
-// Línea 92
-// Línea 93
-// Línea 94
-// Línea 95
-// Línea 96
-// Línea 97
-// Línea 98
-// Línea 99
-// Línea 100
-// Línea 101
-// Línea 102
-// Línea 103
-// Línea 104
-// Línea 105
-// Línea 106
-// Línea 107
-// Línea 108
-// Línea 109
-// Línea 110
-// Línea 111
-// Línea 112
-// Línea 113
-// Línea 114
-// Línea 115
-// Línea 116
-// Línea 117
-// Línea 118
-// Línea 119
-// Línea 120
-// Línea 121
-// Línea 122
-// Línea 123
-// Línea 124
-// Línea 125
-// Línea 126
-// Línea 127
-// Línea 128
-// Línea 129
-// Línea 130
-// Línea 131
-// Línea 132
-// Línea 133
-// Línea 134
-// Línea 135
-// Línea 136
-// Línea 137
-// Línea 138
-// Línea 139
-// Línea 140
-// Línea 141
-// Línea 142
-// Línea 143
-// Línea 144
-// Línea 145
-// Línea 146
-// Línea 147
-// Línea 148
-// Línea 149
-// Línea 150
-// Línea 151
-// Línea 152
-// Línea 153
-// Línea 154
-// Línea 155
-// Línea 156
-// Línea 157
-// Línea 158
-// Línea 159
-// Línea 160
-// Línea 161
-// Línea 162
-// Línea 163
-// Línea 164
-// Línea 165
-// Línea 166
-// Línea 167
-// Línea 168
-// Línea 169
-// Línea 170
-// Línea 171
-// Línea 172
-// Línea 173
-// Línea 174
-// Línea 175
-// Línea 176
-// Línea 177
-// Línea 178
-// Línea 179
-// Línea 180
-// Línea 181
-// Línea 182
-// Línea 183
-// Línea 184
-// Línea 185
-// Línea 186
-// Línea 187
-// Línea 188
-// Línea 189
-// Línea 190
-// Línea 191
-// Línea 192
-// Línea 193
-// Línea 194
-// Línea 195
-// Línea 196
-// Línea 197
-// Línea 198
-// Línea 199
-// Línea 200
-// Línea 201
-// Línea 202
-// Línea 203
-// Línea 204
-// Línea 205
-// Línea 206
-// Línea 207
-// Línea 208
-// Línea 209
-// Línea 210
-// Línea 211
-// Línea 212
-// Línea 213
-// Línea 214
-// Línea 215
-// Línea 216
-// Línea 217
-// Línea 218
-// Línea 219
-// Línea 220
-// Línea 221
-// Línea 222
-// Línea 223
-// Línea 224
-// Línea 225
-// Línea 226
-// Línea 227
-// Línea 228
-// Línea 229
-// Línea 230
-// Línea 231
-// Línea 232
-// Línea 233
-// Línea 234
-// Línea 235
-// Línea 236
-// Línea 237
-// Línea 238
-// Línea 239
-// Línea 240
-// Línea 241
-// Línea 242
-// Línea 243
-// Línea 244
-// Línea 245
-// Línea 246
-// Línea 247
-// Línea 248
-// Línea 249
-// Línea 250
-// Línea 251
-// Línea 252
-// Línea 253
-// Línea 254
-// Línea 255
-// Línea 256
-// Línea 257
-// Línea 258
-// Línea 259
-// Línea 260
-// Línea 261
-// Línea 262
-// Línea 263
-// Línea 264
-// Línea 265
-// Línea 266
-// Línea 267
-// Línea 268
-// Línea 269
-// Línea 270
-// Línea 271
-// Línea 272
-// Línea 273
-// Línea 274
-// Línea 275
-// Línea 276
-// Línea 277
-// Línea 278
-// Línea 279
-// Línea 280
-// Línea 281
-// Línea 282
-// Línea 283
-// Línea 284
-// Línea 285
-// Línea 286
-// Línea 287
-// Línea 288
-// Línea 289
-// Línea 290
-// Línea 291
-// Línea 292
-// Línea 293
-// Línea 294
-// Línea 295
-// Línea 296
-// Línea 297
-// Línea 298
-// Línea 299
-// Línea 300
-// Línea 301
-// Línea 302
-// Línea 303
-// Línea 304
-// Línea 305
-// Línea 306
-// Línea 307
-// Línea 308
-// Línea 309
-// Línea 310
-// Línea 311
-// Línea 312
-// Línea 313
-// Línea 314
-// Línea 315
-// Línea 316
-// Línea 317
-// Línea 318
-// Línea 319
-// Línea 320
-// Línea 321
-// Línea 322
-// Línea 323
-// Línea 324
-// Línea 325
-// Línea 326
-// Línea 327
-// Línea 328
-// Línea 329
-// Línea 330
-// Línea 331
-// Línea 332
-// Línea 333
-// Línea 334
-// Línea 335
-// Línea 336
-// Línea 337
-// Línea 338
-// Línea 339
-// Línea 340
-// Línea 341
-// Línea 342
-// Línea 343
-// Línea 344
-// Línea 345
-// Línea 346
-// Línea 347
-// Línea 348
-// Línea 349
-// Línea 350
-// Línea 351
-// Línea 352
-// Línea 353
-// Línea 354
-// Línea 355
-// Línea 356
-// Línea 357
-// Línea 358
-// Línea 359
-// Línea 360
-// Línea 361
-// Línea 362
-// Línea 363
-// Línea 364
-// Línea 365
-// Línea 366
-// Línea 367
-// Línea 368
-// Línea 369
-// Línea 370
-// Línea 371
-// Línea 372
-// Línea 373
-// Línea 374
-// Línea 375
-// Línea 376
-// Línea 377
-// Línea 378
-// Línea 379
-// Línea 380
-// Línea 381
-// Línea 382
-// Línea 383
-// Línea 384
-// Línea 385
-// Línea 386
-// Línea 387
-// Línea 388
-// Línea 389
-// Línea 390
-// Línea 391
-// Línea 392
-// Línea 393
-// Línea 394
-// Línea 395
-// Línea 396
-// Línea 397
-// Línea 398
-// Línea 399
-// Línea 400
-// Línea 401
-// Línea 402
-// Línea 403
-// Línea 404
-// Línea 405
-// Línea 406
-// Línea 407
-// Línea 408
-// Línea 409
-// Línea 410
-// Línea 411
-// Línea 412
-// Línea 413
-// Línea 414
-// Línea 415
-// Línea 416
-// Línea 417
-// Línea 418
-// Línea 419
-// Línea 420
-// Línea 421
-// Línea 422
-// Línea 423
-// Línea 424
-// Línea 425
-// Línea 426
-// Línea 427
-// Línea 428
-// Línea 429
-// Línea 430
-// Línea 431
-// Línea 432
-// Línea 433
-// Línea 434
-// Línea 435
-// Línea 436
-// Línea 437
-// Línea 438
-// Línea 439
-// Línea 440
-// Línea 441
-// Línea 442
-// Línea 443
-// Línea 444
-// Línea 445
-// Línea 446
-// Línea 447
-// Línea 448
-// Línea 449
-// Línea 450
-// Línea 451
-// Línea 452
-// Línea 453
-// Línea 454
-// Línea 455
-// Línea 456
-// Línea 457
-// Línea 458
-// Línea 459
-// Línea 460
-// Línea 461
-// Línea 462
-// Línea 463
-// Línea 464
-// Línea 465
-// Línea 466
-// Línea 467
-// Línea 468
-// Línea 469
-// Línea 470
-// Línea 471
-// Línea 472
-// Línea 473
-// Línea 474
-// Línea 475
-// Línea 476
-// Línea 477
-// Línea 478
-// Línea 479
-// Línea 480
-// Línea 481
-// Línea 482
-// Línea 483
-// Línea 484
-// Línea 485
-// Línea 486
-// Línea 487
-// Línea 488
-// Línea 489
-// Línea 490
-// Línea 491
-// Línea 492
-// Línea 493
-// Línea 494
-// Línea 495
-// Línea 496
-// Línea 497
-// Línea 498
-// Línea 499
-// Línea 500
-// Línea 501
-// Línea 502
-// Línea 503
-// Línea 504
-// Línea 505
-// Línea 506
-// Línea 507
-// Línea 508
-// Línea 509
-// Línea 510
-// Línea 511
-// Línea 512
-// Línea 513
-// Línea 514
-// Línea 515
-// Línea 516
-// Línea 517
-// Línea 518
-// Línea 519
-// Línea 520
-// Línea 521
-// Línea 522
-// Línea 523
-// Línea 524
-// Línea 525
-// Línea 526
-// Línea 527
-// Línea 528
-// Línea 529
-// Línea 530
-// Línea 531
-// Línea 532
-// Línea 533
-// Línea 534
-// Línea 535
-// Línea 536
-// Línea 537
-// Línea 538
-// Línea 539
-// Línea 540
-// Línea 541
-// Línea 542
-// Línea 543
-// Línea 544
-// Línea 545
-// Línea 546
-// Línea 547
-// Línea 548
-// Línea 549
-// Línea 550
-// Línea 551
-// Línea 552
-// Línea 553
-// Línea 554
-// Línea 555
-// Línea 556
-// Línea 557
-// Línea 558
-// Línea 559
-// Línea 560
-// Línea 561
-// Línea 562
-// Línea 563
-// Línea 564
-// Línea 565
-// Línea 566
-// Línea 567
-// Línea 568
-// Línea 569
-// Línea 570
-// Línea 571
-// Línea 572
-// Línea 573
-// Línea 574
-// Línea 575
-// Línea 576
-// Línea 577
-// Línea 578
-// Línea 579
-// Línea 580
-// Línea 581
-// Línea 582
-// Línea 583
-// Línea 584
-// Línea 585
-// Línea 586
-// Línea 587
-// Línea 588
-// Línea 589
-// Línea 590
-// Línea 591
-// Línea 592
-// Línea 593
-// Línea 594
-// Línea 595
-// Línea 596
-// Línea 597
-// Línea 598
-// Línea 599
-// Línea 600
-// Línea 601
-// Línea 602
-// Línea 603
-// Línea 604
-// Línea 605
-// Línea 606
-// Línea 607
-// Línea 608
-// Línea 609
-// Línea 610
-// Línea 611
-// Línea 612
-// Línea 613
-// Línea 614
-// Línea 615
-// Línea 616
-// Línea 617
-// Línea 618
-// Línea 619
-// Línea 620
-// Línea 621
-// Línea 622
-// Línea 623
-// Línea 624
-// Línea 625
-// Línea 626
-// Línea 627
-// Línea 628
-// Línea 629
-// Línea 630
-// Línea 631
-// Línea 632
-// Línea 633
-// Línea 634
-// Línea 635
-// Línea 636
-// Línea 637
-// Línea 638
-// Línea 639
-// Línea 640
-// Línea 641
-// Línea 642
-// Línea 643
-// Línea 644
-// Línea 645
-// Línea 646
-// Línea 647
-// Línea 648
-// Línea 649
-// Línea 650
-// Línea 651
-// Línea 652
-// Línea 653
-// Línea 654
-// Línea 655
-// Línea 656
-// Línea 657
-// Línea 658
-// Línea 659
-// Línea 660
-// Línea 661
-// Línea 662
-// Línea 663
-// Línea 664
-// Línea 665
-// Línea 666
-// Línea 667
-// Línea 668
-// Línea 669
-// Línea 670
-// Línea 671
-// Línea 672
-// Línea 673
-// Línea 674
-// Línea 675
-// Línea 676
-// Línea 677
-// Línea 678
-// Línea 679
-// Línea 680
-// Línea 681
-// Línea 682
-// Línea 683
-// Línea 684
-// Línea 685
-// Línea 686
-// Línea 687
-// Línea 688
-// Línea 689
-// Línea 690
-// Línea 691
-// Línea 692
-// Línea 693
-// Línea 694
-// Línea 695
-// Línea 696
-// Línea 697
-// Línea 698
-// Línea 699
-// Línea 700
-// Línea 701
-// Línea 702
-// Línea 703
-// Línea 704
-// Línea 705
-// Línea 706
-// Línea 707
-// Línea 708
-// Línea 709
-// Línea 710
-// Línea 711
-// Línea 712
-// Línea 713
-// Línea 714
-// Línea 715
-// Línea 716
-// Línea 717
-// Línea 718
-// Línea 719
-// Línea 720
-// Línea 721
-// Línea 722
-// Línea 723
-// Línea 724
-// Línea 725
-// Línea 726
-// Línea 727
-// Línea 728
-// Línea 729
-// Línea 730
-// Línea 731
-// Línea 732
-// Línea 733
-// Línea 734
-// Línea 735
-// Línea 736
-// Línea 737
-// Línea 738
-// Línea 739
-// Línea 740
-// Línea 741
-// Línea 742
-// Línea 743
-// Línea 744
-// Línea 745
-// Línea 746
-// Línea 747
-// Línea 748
-// Línea 749
-// Línea 750
-// Línea 751
-// Línea 752
-// Línea 753
-// Línea 754
-// Línea 755
-// Línea 756
-// Línea 757
-// Línea 758
-// Línea 759
-// Línea 760
-// Línea 761
-// Línea 762
-// Línea 763
-// Línea 764
-// Línea 765
-// Línea 766
-// Línea 767
-// Línea 768
-// Línea 769
-// Línea 770
-// Línea 771
-// Línea 772
-// Línea 773
-// Línea 774
-// Línea 775
-// Línea 776
-// Línea 777
-// Línea 778
-// Línea 779
-// Línea 780
-// Línea 781
-// Línea 782
-// Línea 783
-// Línea 784
-// Línea 785
-// Línea 786
-// Línea 787
-// Línea 788
-// Línea 789
-// Línea 790
-// Línea 791
-// Línea 792
-// Línea 793
-// Línea 794
-// Línea 795
-// Línea 796
-// Línea 797
-// Línea 798
-// Línea 799
-// Línea 800
+﻿const Project = require('../models/Project.model');
+const State = require('../models/State.model');
+const Category = require('../models/Category.model');
+const User = require('../models/User.model');
+const Role = require('../models/Role.model');
+const { sendResponse, sendError } = require('../utils/response.util');
+
+class ProjectController {
+  // Listar proyectos del usuario con estadísticas
+  async getProjects(req, res) {
+    try {
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 10;
+      const skip = (page - 1) * limit;
+      const { status, priority, category } = req.query;
+
+      // Filtros base
+      const filter = {
+        isActive: true,
+        $or: [
+          { owner: req.user.userId },
+          { 'members.user': req.user.userId }
+        ]
+      };
+
+      // Filtros adicionales
+      if (status) filter.status = status;
+      if (priority) filter.priority = priority;
+      if (category) filter.category = category;
+
+      const projects = await Project.find(filter)
+        .populate('owner', 'firstName lastName email avatar')
+        .populate('category', 'name description')
+        .populate('status', 'name description')
+        .populate('members.user', 'firstName lastName email avatar')
+        .populate('members.role', 'name')
+        .skip(skip)
+        .limit(limit)
+        .sort({ updatedAt: -1 });
+
+      const total = await Project.countDocuments(filter);
+
+      // Estadísticas adicionales
+      const stats = await this.getProjectStats(req.user.userId);
+
+      sendResponse(res, 200, true, 'Proyectos obtenidos exitosamente', {
+        projects,
+        pagination: {
+          page,
+          limit,
+          total,
+          pages: Math.ceil(total / limit)
+        },
+        stats,
+        filters: { status, priority, category }
+      });
+    } catch (error) {
+      console.error('Error obtener proyectos:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Crear proyecto con configuraciones para tasks/comments
+  async createProject(req, res) {
+    try {
+      const {
+        name,
+        description,
+        category,
+        startDate,
+        endDate,
+        estimatedHours,
+        budget,
+        priority,
+        tags,
+        settings
+      } = req.body;
+
+      // Verificar categoría
+      const categoryExists = await Category.findById(category);
+      if (!categoryExists || !categoryExists.isActive) {
+        return sendError(res, 400, 'Categoría no válida');
+      }
+
+      // Estado inicial para proyecto
+      let initialState = await State.findOne({
+        type: 'Project',
+        name: 'Planificación'
+      });
+
+      if (!initialState) {
+        initialState = await State.create({
+          name: 'Planificación',
+          type: 'Project',
+          description: 'Estado inicial del proyecto'
+        });
+      }
+
+      // Obtener rol del usuario para el proyecto
+      const userRole = await Role.findById(req.user.globalRole._id);
+
+      // Configuraciones por defecto para integración con Maryamm
+      const defaultSettings = {
+        allowComments: true,
+        allowTaskCreation: true,
+        requireTaskApproval: userRole?.name === 'Developer',
+        notifyOnTaskComplete: true,
+        aiAssistEnabled: true,
+        ...settings
+      };
+
+      // Permisos por defecto basados en rol
+      const getPermissionsByRole = (roleName) => {
+        switch(roleName) {
+          case 'Admin':
+            return {
+              canCreateTasks: true,
+              canEditTasks: true,
+              canDeleteTasks: true,
+              canAssignTasks: true
+            };
+          case 'Project Manager':
+            return {
+              canCreateTasks: true,
+              canEditTasks: true,
+              canDeleteTasks: true,
+              canAssignTasks: true
+            };
+          case 'Developer':
+            return {
+              canCreateTasks: true,
+              canEditTasks: true,
+              canDeleteTasks: false,
+              canAssignTasks: false
+            };
+          default:
+            return {
+              canCreateTasks: false,
+              canEditTasks: false,
+              canDeleteTasks: false,
+              canAssignTasks: false
+            };
+        }
+      };
+
+      // Crear proyecto
+      const project = await Project.create({
+        name,
+        description,
+        category,
+        owner: req.user.userId,
+        startDate,
+        endDate,
+        estimatedHours,
+        budget,
+        priority,
+        tags: tags || [],
+        status: initialState._id,
+        settings: defaultSettings,
+        members: [{
+          user: req.user.userId,
+          role: userRole._id,
+          permissions: getPermissionsByRole(userRole?.name)
+        }],
+        aiMetadata: {
+          healthScore: 0,
+          riskLevel: 'Low',
+          recommendations: []
+        }
+      });
+
+      // Poblar relaciones
+      await project.populate([
+        { path: 'owner', select: 'firstName lastName email avatar' },
+        { path: 'category', select: 'name description' },
+        { path: 'status', select: 'name description' },
+        { path: 'members.user', select: 'firstName lastName email avatar' },
+        { path: 'members.role', select: 'name' }
+      ]);
+
+      sendResponse(res, 201, true, 'Proyecto creado exitosamente', { project });
+    } catch (error) {
+      console.error('Error crear proyecto:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Obtener proyecto específico con detalles completos
+  async getProject(req, res) {
+    try {
+      const { id } = req.params;
+      const includeStats = req.query.stats === 'true';
+
+      const project = await Project.findById(id)
+        .populate('owner', 'firstName lastName email avatar')
+        .populate('category', 'name description')
+        .populate('status', 'name description')
+        .populate('members.user', 'firstName lastName email avatar')
+        .populate('members.role', 'name');
+
+      if (!project || !project.isActive) {
+        return sendError(res, 404, 'Proyecto no encontrado');
+      }
+
+      // Verificar acceso
+      const hasAccess = project.owner._id.toString() === req.user.userId ||
+                       project.members.some(member => 
+                         member.user._id.toString() === req.user.userId
+                       );
+
+      if (!hasAccess) {
+        return sendError(res, 403, 'Sin acceso al proyecto');
+      }
+
+      let responseData = { project };
+
+      // Incluir estadísticas si se solicitan
+      if (includeStats) {
+        try {
+          // Estas estadísticas se completarán cuando Maryamm implemente Task
+          const mongoose = require('mongoose');
+          const Task = mongoose.model('Task');
+          const Comment = mongoose.model('Comment');
+          
+          const [tasks, comments] = await Promise.all([
+            Task.find({ project: id, isActive: true }).populate('status assignedTo'),
+            Comment.find({ projectid: id }).populate('author')
+          ]);
+
+          const projectStats = {
+            tasks: {
+              total: tasks.length,
+              completed: tasks.filter(t => t.completedAt).length,
+              pending: tasks.filter(t => !t.completedAt).length,
+              overdue: tasks.filter(t => t.dueDate < new Date() && !t.completedAt).length
+            },
+            comments: {
+              total: comments.length,
+              recent: comments.slice(-5)
+            },
+            progress: tasks.length > 0 ? 
+              Math.round((tasks.filter(t => t.completedAt).length / tasks.length) * 100) : 0
+          };
+
+          responseData.stats = projectStats;
+        } catch (statError) {
+          // Si Task/Comment no existen aún, estadísticas básicas
+          responseData.stats = {
+            tasks: { total: 0, completed: 0, pending: 0, overdue: 0 },
+            comments: { total: 0, recent: [] },
+            progress: 0
+          };
+        }
+      }
+
+      sendResponse(res, 200, true, 'Proyecto obtenido exitosamente', responseData);
+    } catch (error) {
+      console.error('Error obtener proyecto:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Actualizar proyecto
+  async updateProject(req, res) {
+    try {
+      const { id } = req.params;
+      const updateData = req.body;
+
+      const project = await Project.findById(id);
+      if (!project || !project.isActive) {
+        return sendError(res, 404, 'Proyecto no encontrado');
+      }
+
+      // Verificar permisos (owner o PM del proyecto)
+      const canEdit = project.owner.toString() === req.user.userId ||
+                     project.members.some(member => 
+                       member.user.toString() === req.user.userId && 
+                       member.role.name === 'Project Manager'
+                     );
+
+      if (!canEdit) {
+        return sendError(res, 403, 'Sin permisos para editar este proyecto');
+      }
+
+      // Validar categoría si se actualiza
+      if (updateData.category) {
+        const categoryExists = await Category.findById(updateData.category);
+        if (!categoryExists || !categoryExists.isActive) {
+          return sendError(res, 400, 'Categoría no válida');
+        }
+      }
+
+      // No permitir cambio de owner por esta ruta
+      delete updateData.owner;
+      delete updateData.members;
+
+      const updatedProject = await Project.findByIdAndUpdate(
+        id,
+        updateData,
+        { new: true, runValidators: true }
+      ).populate([
+        { path: 'owner', select: 'firstName lastName email avatar' },
+        { path: 'category', select: 'name description' },
+        { path: 'status', select: 'name description' },
+        { path: 'members.user', select: 'firstName lastName email avatar' },
+        { path: 'members.role', select: 'name' }
+      ]);
+
+      sendResponse(res, 200, true, 'Proyecto actualizado exitosamente', { project: updatedProject });
+    } catch (error) {
+      console.error('Error actualizar proyecto:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Eliminar proyecto (soft delete)
+  async deleteProject(req, res) {
+    try {
+      const { id } = req.params;
+
+      const project = await Project.findById(id);
+      if (!project || !project.isActive) {
+        return sendError(res, 404, 'Proyecto no encontrado');
+      }
+
+      // Solo owner o Admin pueden eliminar
+      const canDelete = project.owner.toString() === req.user.userId ||
+                       req.user.role === 'Admin';
+
+      if (!canDelete) {
+        return sendError(res, 403, 'Sin permisos para eliminar este proyecto');
+      }
+
+      await Project.findByIdAndUpdate(id, { isActive: false });
+
+      sendResponse(res, 200, true, 'Proyecto eliminado exitosamente');
+    } catch (error) {
+      console.error('Error eliminar proyecto:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Agregar miembro al proyecto con permisos específicos
+  async addMember(req, res) {
+    try {
+      const { id } = req.params;
+      const { user, role, permissions } = req.body;
+
+      const project = await Project.findById(id);
+      if (!project || !project.isActive) {
+        return sendError(res, 404, 'Proyecto no encontrado');
+      }
+
+      // Solo owner puede agregar miembros
+      if (project.owner.toString() !== req.user.userId) {
+        return sendError(res, 403, 'Solo el propietario puede agregar miembros');
+      }
+
+      // Verificar que el usuario existe
+      const userExists = await User.findById(user);
+      if (!userExists || !userExists.isActive) {
+        return sendError(res, 400, 'Usuario no válido');
+      }
+
+      // Verificar que el rol existe
+      const roleExists = await Role.findById(role);
+      if (!roleExists || !roleExists.isActive) {
+        return sendError(res, 400, 'Rol no válido');
+      }
+
+      // Verificar que no sea ya miembro
+      const isAlreadyMember = project.members.some(
+        member => member.user.toString() === user
+      );
+
+      if (isAlreadyMember) {
+        return sendError(res, 400, 'El usuario ya es miembro del proyecto');
+      }
+
+      // Permisos por defecto basados en rol si no se especifican
+      const defaultPermissions = permissions || this.getPermissionsByRole(roleExists.name);
+
+      // Agregar miembro
+      project.members.push({ 
+        user, 
+        role,
+        permissions: defaultPermissions
+      });
+      await project.save();
+
+      await project.populate([
+        { path: 'members.user', select: 'firstName lastName email avatar' },
+        { path: 'members.role', select: 'name' }
+      ]);
+
+      sendResponse(res, 200, true, 'Miembro agregado exitosamente', {
+        project: {
+          _id: project._id,
+          name: project.name,
+          members: project.members
+        }
+      });
+    } catch (error) {
+      console.error('Error agregar miembro:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Remover miembro del proyecto
+  async removeMember(req, res) {
+    try {
+      const { id, userId } = req.params;
+
+      const project = await Project.findById(id);
+      if (!project || !project.isActive) {
+        return sendError(res, 404, 'Proyecto no encontrado');
+      }
+
+      // Solo owner puede remover miembros
+      if (project.owner.toString() !== req.user.userId) {
+        return sendError(res, 403, 'Solo el propietario puede remover miembros');
+      }
+
+      // No se puede remover al owner
+      if (userId === project.owner.toString()) {
+        return sendError(res, 400, 'No se puede remover al propietario del proyecto');
+      }
+
+      // Verificar que es miembro
+      const memberIndex = project.members.findIndex(
+        member => member.user.toString() === userId
+      );
+
+      if (memberIndex === -1) {
+        return sendError(res, 400, 'El usuario no es miembro del proyecto');
+      }
+
+      // Remover miembro
+      project.members.splice(memberIndex, 1);
+      await project.save();
+
+      sendResponse(res, 200, true, 'Miembro removido exitosamente');
+    } catch (error) {
+      console.error('Error remover miembro:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Cambiar estado del proyecto
+  async changeStatus(req, res) {
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+
+      const project = await Project.findById(id);
+      if (!project || !project.isActive) {
+        return sendError(res, 404, 'Proyecto no encontrado');
+      }
+
+      // Verificar permisos (owner o PM del proyecto)
+      const canChange = project.owner.toString() === req.user.userId ||
+                       project.members.some(member => 
+                         member.user.toString() === req.user.userId && 
+                         member.role.name === 'Project Manager'
+                       );
+
+      if (!canChange) {
+        return sendError(res, 403, 'Sin permisos para cambiar el estado');
+      }
+
+      // Verificar estado válido
+      const newStatus = await State.findById(status);
+      if (!newStatus || !newStatus.isActive || newStatus.type !== 'Project') {
+        return sendError(res, 400, 'Estado no válido para proyectos');
+      }
+
+      project.status = status;
+      
+      // Actualizar progreso si el proyecto se completa
+      if (newStatus.name === 'Completado') {
+        project.aiMetadata.healthScore = 100;
+      }
+
+      await project.save();
+      await project.populate('status', 'name description');
+
+      sendResponse(res, 200, true, 'Estado actualizado exitosamente', {
+        project: {
+          _id: project._id,
+          name: project.name,
+          status: project.status,
+          aiMetadata: project.aiMetadata
+        }
+      });
+    } catch (error) {
+      console.error('Error cambiar estado:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Actualizar configuraciones del proyecto
+  async updateSettings(req, res) {
+    try {
+      const { id } = req.params;
+      const { settings } = req.body;
+
+      const project = await Project.findById(id);
+      if (!project || !project.isActive) {
+        return sendError(res, 404, 'Proyecto no encontrado');
+      }
+
+      // Solo owner puede cambiar configuraciones
+      if (project.owner.toString() !== req.user.userId) {
+        return sendError(res, 403, 'Solo el propietario puede cambiar configuraciones');
+      }
+
+      project.settings = { ...project.settings, ...settings };
+      await project.save();
+
+      sendResponse(res, 200, true, 'Configuraciones actualizadas', {
+        settings: project.settings
+      });
+    } catch (error) {
+      console.error('Error actualizar configuraciones:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Actualizar permisos de miembro
+  async updateMemberPermissions(req, res) {
+    try {
+      const { id, userId } = req.params;
+      const { permissions } = req.body;
+
+      const project = await Project.findById(id);
+      if (!project || !project.isActive) {
+        return sendError(res, 404, 'Proyecto no encontrado');
+      }
+
+      // Solo owner puede cambiar permisos
+      if (project.owner.toString() !== req.user.userId) {
+        return sendError(res, 403, 'Solo el propietario puede cambiar permisos');
+      }
+
+      const memberIndex = project.members.findIndex(
+        member => member.user.toString() === userId
+      );
+
+      if (memberIndex === -1) {
+        return sendError(res, 400, 'Usuario no es miembro del proyecto');
+      }
+
+      project.members[memberIndex].permissions = {
+        ...project.members[memberIndex].permissions,
+        ...permissions
+      };
+
+      await project.save();
+
+      sendResponse(res, 200, true, 'Permisos actualizados exitosamente', {
+        member: project.members[memberIndex]
+      });
+    } catch (error) {
+      console.error('Error actualizar permisos:', error);
+      sendError(res, 500, 'Error interno del servidor');
+    }
+  }
+
+  // Helper: Obtener estadísticas del usuario
+  async getProjectStats(userId) {
+    try {
+      const totalProjects = await Project.countDocuments({
+        $or: [{ owner: userId }, { 'members.user': userId }],
+        isActive: true
+      });
+
+      const ownedProjects = await Project.countDocuments({
+        owner: userId,
+        isActive: true
+      });
+
+      const memberProjects = totalProjects - ownedProjects;
+
+      const overdueProjects = await Project.countDocuments({
+        $or: [{ owner: userId }, { 'members.user': userId }],
+        isActive: true,
+        endDate: { $lt: new Date() }
+      });
+
+      return {
+        total: totalProjects,
+        owned: ownedProjects,
+        member: memberProjects,
+        overdue: overdueProjects
+      };
+    } catch (error) {
+      console.error('Error obteniendo estadísticas:', error);
+      return { total: 0, owned: 0, member: 0, overdue: 0 };
+    }
+  }
+
+  // Helper: Permisos por rol
+  getPermissionsByRole(roleName) {
+    switch(roleName) {
+      case 'Admin':
+        return {
+          canCreateTasks: true,
+          canEditTasks: true,
+          canDeleteTasks: true,
+          canAssignTasks: true
+        };
+      case 'Project Manager':
+        return {
+          canCreateTasks: true,
+          canEditTasks: true,
+          canDeleteTasks: true,
+          canAssignTasks: true
+        };
+      case 'Developer':
+        return {
+          canCreateTasks: true,
+          canEditTasks: true,
+          canDeleteTasks: false,
+          canAssignTasks: false
+        };
+      default:
+        return {
+          canCreateTasks: false,
+          canEditTasks: false,
+          canDeleteTasks: false,
+          canAssignTasks: false
+        };
+    }
+  }
+}
+
+module.exports = new ProjectController();

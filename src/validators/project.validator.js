@@ -1,200 +1,193 @@
-﻿// Línea 1
-// Línea 2
-// Línea 3
-// Línea 4
-// Línea 5
-// Línea 6
-// Línea 7
-// Línea 8
-// Línea 9
-// Línea 10
-// Línea 11
-// Línea 12
-// Línea 13
-// Línea 14
-// Línea 15
-// Línea 16
-// Línea 17
-// Línea 18
-// Línea 19
-// Línea 20
-// Línea 21
-// Línea 22
-// Línea 23
-// Línea 24
-// Línea 25
-// Línea 26
-// Línea 27
-// Línea 28
-// Línea 29
-// Línea 30
-// Línea 31
-// Línea 32
-// Línea 33
-// Línea 34
-// Línea 35
-// Línea 36
-// Línea 37
-// Línea 38
-// Línea 39
-// Línea 40
-// Línea 41
-// Línea 42
-// Línea 43
-// Línea 44
-// Línea 45
-// Línea 46
-// Línea 47
-// Línea 48
-// Línea 49
-// Línea 50
-// Línea 51
-// Línea 52
-// Línea 53
-// Línea 54
-// Línea 55
-// Línea 56
-// Línea 57
-// Línea 58
-// Línea 59
-// Línea 60
-// Línea 61
-// Línea 62
-// Línea 63
-// Línea 64
-// Línea 65
-// Línea 66
-// Línea 67
-// Línea 68
-// Línea 69
-// Línea 70
-// Línea 71
-// Línea 72
-// Línea 73
-// Línea 74
-// Línea 75
-// Línea 76
-// Línea 77
-// Línea 78
-// Línea 79
-// Línea 80
-// Línea 81
-// Línea 82
-// Línea 83
-// Línea 84
-// Línea 85
-// Línea 86
-// Línea 87
-// Línea 88
-// Línea 89
-// Línea 90
-// Línea 91
-// Línea 92
-// Línea 93
-// Línea 94
-// Línea 95
-// Línea 96
-// Línea 97
-// Línea 98
-// Línea 99
-// Línea 100
-// Línea 101
-// Línea 102
-// Línea 103
-// Línea 104
-// Línea 105
-// Línea 106
-// Línea 107
-// Línea 108
-// Línea 109
-// Línea 110
-// Línea 111
-// Línea 112
-// Línea 113
-// Línea 114
-// Línea 115
-// Línea 116
-// Línea 117
-// Línea 118
-// Línea 119
-// Línea 120
-// Línea 121
-// Línea 122
-// Línea 123
-// Línea 124
-// Línea 125
-// Línea 126
-// Línea 127
-// Línea 128
-// Línea 129
-// Línea 130
-// Línea 131
-// Línea 132
-// Línea 133
-// Línea 134
-// Línea 135
-// Línea 136
-// Línea 137
-// Línea 138
-// Línea 139
-// Línea 140
-// Línea 141
-// Línea 142
-// Línea 143
-// Línea 144
-// Línea 145
-// Línea 146
-// Línea 147
-// Línea 148
-// Línea 149
-// Línea 150
-// Línea 151
-// Línea 152
-// Línea 153
-// Línea 154
-// Línea 155
-// Línea 156
-// Línea 157
-// Línea 158
-// Línea 159
-// Línea 160
-// Línea 161
-// Línea 162
-// Línea 163
-// Línea 164
-// Línea 165
-// Línea 166
-// Línea 167
-// Línea 168
-// Línea 169
-// Línea 170
-// Línea 171
-// Línea 172
-// Línea 173
-// Línea 174
-// Línea 175
-// Línea 176
-// Línea 177
-// Línea 178
-// Línea 179
-// Línea 180
-// Línea 181
-// Línea 182
-// Línea 183
-// Línea 184
-// Línea 185
-// Línea 186
-// Línea 187
-// Línea 188
-// Línea 189
-// Línea 190
-// Línea 191
-// Línea 192
-// Línea 193
-// Línea 194
-// Línea 195
-// Línea 196
-// Línea 197
-// Línea 198
-// Línea 199
-// Línea 200
+﻿const { body, param } = require('express-validator');
+
+const validateProject = [
+  body('name')
+    .trim()
+    .isLength({ min: 3, max: 100 })
+    .withMessage('Nombre debe tener entre 3 y 100 caracteres'),
+
+  body('description')
+    .trim()
+    .isLength({ min: 10, max: 1000 })
+    .withMessage('Descripción debe tener entre 10 y 1000 caracteres'),
+
+  body('category')
+    .isMongoId()
+    .withMessage('ID de categoría inválido'),
+
+  body('startDate')
+    .isISO8601()
+    .withMessage('Fecha de inicio inválida'),
+
+  body('endDate')
+    .isISO8601()
+    .withMessage('Fecha de fin inválida')
+    .custom((endDate, { req }) => {
+      if (new Date(endDate) <= new Date(req.body.startDate)) {
+        throw new Error('Fecha de fin debe ser posterior al inicio');
+      }
+      return true;
+    }),
+
+  body('estimatedHours')
+    .optional()
+    .isFloat({ min: 0 })
+    .withMessage('Horas estimadas deben ser positivas'),
+
+  body('budget')
+    .optional()
+    .isFloat({ min: 0 })
+    .withMessage('Presupuesto debe ser positivo'),
+
+  body('priority')
+    .optional()
+    .isIn(['Low', 'Medium', 'High', 'Critical'])
+    .withMessage('Prioridad inválida'),
+
+  body('tags')
+    .optional()
+    .isArray()
+    .withMessage('Tags deben ser un array'),
+
+  body('tags.*')
+    .optional()
+    .trim()
+    .isLength({ min: 1, max: 20 })
+    .withMessage('Cada tag debe tener entre 1 y 20 caracteres'),
+
+  body('settings')
+    .optional()
+    .isObject()
+    .withMessage('Settings debe ser un objeto'),
+
+  body('settings.allowComments')
+    .optional()
+    .isBoolean()
+    .withMessage('allowComments debe ser booleano'),
+
+  body('settings.allowTaskCreation')
+    .optional()
+    .isBoolean()
+    .withMessage('allowTaskCreation debe ser booleano'),
+
+  body('settings.requireTaskApproval')
+    .optional()
+    .isBoolean()
+    .withMessage('requireTaskApproval debe ser booleano'),
+
+  body('settings.notifyOnTaskComplete')
+    .optional()
+    .isBoolean()
+    .withMessage('notifyOnTaskComplete debe ser booleano'),
+
+  body('settings.aiAssistEnabled')
+    .optional()
+    .isBoolean()
+    .withMessage('aiAssistEnabled debe ser booleano')
+];
+
+const validateMember = [
+  body('user')
+    .isMongoId()
+    .withMessage('ID de usuario inválido'),
+
+  body('role')
+    .isMongoId()
+    .withMessage('ID de rol inválido'),
+
+  body('permissions')
+    .optional()
+    .isObject()
+    .withMessage('Permisos debe ser un objeto'),
+
+  body('permissions.canCreateTasks')
+    .optional()
+    .isBoolean()
+    .withMessage('canCreateTasks debe ser booleano'),
+
+  body('permissions.canEditTasks')
+    .optional()
+    .isBoolean()
+    .withMessage('canEditTasks debe ser booleano'),
+
+  body('permissions.canDeleteTasks')
+    .optional()
+    .isBoolean()
+    .withMessage('canDeleteTasks debe ser booleano'),
+
+  body('permissions.canAssignTasks')
+    .optional()
+    .isBoolean()
+    .withMessage('canAssignTasks debe ser booleano')
+];
+
+const validateStatus = [
+  body('status')
+    .isMongoId()
+    .withMessage('ID de estado inválido')
+];
+
+const validateSettings = [
+  body('settings')
+    .isObject()
+    .withMessage('Settings es requerido y debe ser un objeto'),
+
+  body('settings.allowComments')
+    .optional()
+    .isBoolean()
+    .withMessage('allowComments debe ser booleano'),
+
+  body('settings.allowTaskCreation')
+    .optional()
+    .isBoolean()
+    .withMessage('allowTaskCreation debe ser booleano'),
+
+  body('settings.requireTaskApproval')
+    .optional()
+    .isBoolean()
+    .withMessage('requireTaskApproval debe ser booleano'),
+
+  body('settings.notifyOnTaskComplete')
+    .optional()
+    .isBoolean()
+    .withMessage('notifyOnTaskComplete debe ser booleano'),
+
+  body('settings.aiAssistEnabled')
+    .optional()
+    .isBoolean()
+    .withMessage('aiAssistEnabled debe ser booleano')
+];
+
+const validatePermissions = [
+  body('permissions')
+    .isObject()
+    .withMessage('Permisos es requerido y debe ser un objeto'),
+
+  body('permissions.canCreateTasks')
+    .optional()
+    .isBoolean()
+    .withMessage('canCreateTasks debe ser booleano'),
+
+  body('permissions.canEditTasks')
+    .optional()
+    .isBoolean()
+    .withMessage('canEditTasks debe ser booleano'),
+
+  body('permissions.canDeleteTasks')
+    .optional()
+    .isBoolean()
+    .withMessage('canDeleteTasks debe ser booleano'),
+
+  body('permissions.canAssignTasks')
+    .optional()
+    .isBoolean()
+    .withMessage('canAssignTasks debe ser booleano')
+];
+
+module.exports = {
+  validateProject,
+  validateMember,
+  validateStatus,
+  validateSettings,
+  validatePermissions
+};

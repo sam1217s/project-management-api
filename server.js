@@ -42,6 +42,9 @@ app.get('/health', (req, res) => {
 app.use('/api/auth', require('./src/routes/auth.routes'));
 app.use('/api/users', require('./src/routes/user.routes'));
 app.use('/api/roles', require('./src/routes/role.routes'));
+// ✅ NUEVA RUTA DE MARIANA:
+app.use('/api/projects', require('./src/routes/project.routes'));
+
 
 // 404 handler
 app.use('*', (req, res) => {
